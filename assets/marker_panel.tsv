@@ -1,0 +1,15 @@
+# Pregnancy fetal-marker panel. Version-controlled; edited deliberately.
+# tier:   rps4y1  -> Tier-1 override marker (Y-chromosome, decisive when present)
+#         secondary -> Tier-2 voting markers (used when RPS4Y1 is not informative)
+# aliases: comma-separated fallback symbols tried if the primary symbol is not
+#          found in the expression matrix features (symbol -> Ensembl resolution
+#          happens against features.tsv; fail loudly if none resolve).
+symbol	tier	aliases	note
+RPS4Y1	rps4y1		Y chromosome; cell-type-independent; fires in all fetal cells of a male fetus.
+HAPLN1	secondary		Fetal/placental.
+PITX2	secondary		Fetal/placental.
+GAPLINC	secondary	LINC00261,LINC01600	Fetal/placental lncRNA; alias/formatting pitfalls.
+HPGDS	secondary	PGDS	Fetal/placental.
+XAGE2	secondary	XAGE2B	Fetal/placental (cancer-testis / X-antigen family).
+XAGE3	secondary		Fetal/placental (cancer-testis / X-antigen family).
+HLA-G	secondary	HLAG	Extravillous trophoblast; fetal.

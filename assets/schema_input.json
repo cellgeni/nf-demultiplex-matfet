@@ -1,0 +1,36 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://raw.githubusercontent.com/cellgeni/nf-demux-preg/main/assets/schema_input.json",
+    "title": "nf-demux-preg samplesheet schema",
+    "description": "Minimal per-library input contract. One row per independently processed sample.",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "properties": {
+            "sample_id": {
+                "type": "string",
+                "pattern": "^\\S+$",
+                "meta": ["id"],
+                "errorMessage": "sample_id must be provided and contain no spaces; it must be unique."
+            },
+            "bam": {
+                "type": "string",
+                "format": "file-path",
+                "pattern": "^\\S+\\.bam$",
+                "errorMessage": "bam must be a path to a .bam file with cell barcodes."
+            },
+            "barcodes": {
+                "type": "string",
+                "format": "file-path",
+                "pattern": "^\\S+\\.(tsv|txt)(\\.gz)?$",
+                "errorMessage": "barcodes must be a (optionally gzipped) filtered cell-barcode file."
+            },
+            "expression": {
+                "type": "string",
+                "format": "path",
+                "errorMessage": "expression must be a CellRanger filtered_feature_bc_matrix directory (v1 primary format)."
+            }
+        },
+        "required": ["sample_id", "bam", "barcodes", "expression"]
+    }
+}

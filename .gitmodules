@@ -1,0 +1,3 @@
+[submodule "modules/nf-demultiplex"]
+	path = modules/nf-demultiplex
+	url = https://github.com/cellgeni/nf-demultiplex.git

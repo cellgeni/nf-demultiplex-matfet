@@ -1,0 +1,12 @@
+# Nextflow
+.nextflow/
+.nextflow.log*
+work/
+results/
+results_*/
+*.pyc
+__pycache__/
+roadmaps/
+
+# Generated synthetic fixture (regenerate with tests/make_fixture.py)
+test_data/sampleM/

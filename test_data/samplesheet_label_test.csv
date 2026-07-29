@@ -1,0 +1,2 @@
+sample_id,souporcell_dir,expression
+sampleM,test_data/sampleM/souporcell,test_data/sampleM/filtered_feature_bc_matrix
