@@ -60,24 +60,28 @@ workflow {
 
     // Fail fast on duplicate sample_ids.
     ch_rows
-        .map { meta, barcodes, bam, expression -> meta.id }
+        .map { meta, _barcodes, _bam, _expression -> meta.id }
         .toList()
         .map { ids ->
-            def dups = ids.countBy { it }.findAll { k, v -> v > 1 }.keySet()
+            def dups = ids.countBy { it }.findAll { _k, v -> v > 1 }.keySet()
             if (dups) { error "Duplicate sample_id(s) in samplesheet: ${dups.join(', ')}" }
         }
 
     // ---- Subworkflow 1: Souporcell demux (K=2) ----
-    ch_soup_in = ch_rows.map { meta, barcodes, bam, expression -> [ meta, barcodes, bam ] }
+    ch_soup_in = ch_rows.map { meta, barcodes, bam, _expression -> [ meta, barcodes, bam ] }
     SOUPORCELL_DEMUX(ch_soup_in)
 
     // ---- Subworkflow 2: maternal/fetal labeling ----
-    ch_expr = ch_rows.map { meta, barcodes, bam, expression -> [ meta, expression ] }
+    ch_expr = ch_rows.map { meta, _barcodes, _bam, expression -> [ meta, expression ] }
     ch_label_in = SOUPORCELL_DEMUX.out.dir
         .join(ch_expr)                                    // (meta, soup_dir, expression)
         .map { meta, soup_dir, expression -> [ meta, soup_dir, expression ] }
 
     LABEL_MATERNAL_FETAL(ch_label_in, file(params.marker_panel, checkIfExists: true))
+
+    workflow.onComplete = {
+        log.info "Done. Results in ${params.outdir} (per-sample tables + reports/<sample_id>.html)."
+    }
 }
 
 /*
@@ -116,8 +120,8 @@ workflow LABEL_ONLY {
         }
 
     LABEL_MATERNAL_FETAL(ch_label_in, file(params.marker_panel, checkIfExists: true))
-}
 
-workflow.onComplete {
-    log.info "Done. Results in ${params.outdir} (per-sample tables + reports/<sample_id>.html)."
+    workflow.onComplete = {
+        log.info "Done. Results in ${params.outdir} (per-sample tables + reports/<sample_id>.html)."
+    }
 }
