@@ -31,6 +31,35 @@ def helpMessage() {
     """.stripIndent()
 }
 
+/*
+ * Pre-flight: this pipeline runs every tool out of params.container
+ * (souporcell_pipeline.py, samtools, numpy/scipy). With no container engine the task
+ * scripts run on the bare host and fail with exit 127 hours into Souporcell, so refuse
+ * to start instead.
+ */
+def checkContainerEngine() {
+    if (!workflow.containerEngine) {
+        error """
+        No container engine is enabled, but every process in this pipeline runs its
+        tools from a container. Re-run with Singularity enabled, e.g.:
+          nextflow run main.nf --input <samplesheet.csv> -profile sanger
+        """.stripIndent()
+    }
+    // Catch a mistyped or missing local image before any task is submitted.
+    if (params.container ==~ /^\/.*\.(sif|img)$/ && !file(params.container).exists()) {
+        error "Container image not found: ${params.container}"
+    }
+}
+
+def completionMessage() {
+    if (workflow.success) {
+        log.info "Done. Results in ${params.outdir} (per-sample tables + reports/<sample_id>.html)."
+    }
+    else {
+        log.error "Pipeline finished with errors (see above). Any partial results are in ${params.outdir}."
+    }
+}
+
 workflow {
     if (params.help || !params.input) {
         helpMessage()
@@ -40,6 +69,8 @@ workflow {
         }
         return
     }
+
+    checkContainerEngine()
 
     // ---- Parse and light-validate the samplesheet ----
     ch_rows = Channel
@@ -80,7 +111,7 @@ workflow {
     LABEL_MATERNAL_FETAL(ch_label_in, file(params.marker_panel, checkIfExists: true))
 
     workflow.onComplete = {
-        log.info "Done. Results in ${params.outdir} (per-sample tables + reports/<sample_id>.html)."
+        completionMessage()
     }
 }
 
@@ -99,6 +130,8 @@ workflow LABEL_ONLY {
         if (!params.input) { log.error "Missing required --input samplesheet."; System.exit(1) }
         return
     }
+
+    checkContainerEngine()
 
     ch_label_in = Channel
         .fromPath(params.input, checkIfExists: true)
@@ -122,6 +155,6 @@ workflow LABEL_ONLY {
     LABEL_MATERNAL_FETAL(ch_label_in, file(params.marker_panel, checkIfExists: true))
 
     workflow.onComplete = {
-        log.info "Done. Results in ${params.outdir} (per-sample tables + reports/<sample_id>.html)."
+        completionMessage()
     }
 }

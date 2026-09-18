@@ -39,6 +39,8 @@ process SOUPORCELL {
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         souporcell_k: "${params.souporcell_k}"
+        souporcell_skip_remap: "${params.skip_remap}"
+        souporcell_no_umi: "${params.no_umi}"
         nf_demultiplex_bin: "${soup_bin}"
         samtools: "\$(samtools --version | head -n1 | sed 's/samtools //')"
     END_VERSIONS

@@ -104,10 +104,11 @@ Outputs consumed downstream: `clusters.tsv`, `cluster_genotypes.vcf`, `ambient_r
 Repo: <https://github.com/cellgeni/nf-demultiplex>
 
 - Sample sheet columns: `sample_id, BAM, barcodes.gz, K` → **K=2 per line, no upstream code change.**
-- Reference defaults (from upstream `nextflow.config`, reused verbatim):
+- Reference paths reused from upstream `nextflow.config`:
   - `soc_fasta = /nfs/cellgeni/STAR/human/2020A/GRCh38_v32_modified.fa`
   - `soc_vcf   = /nfs/cellgeni/pipeline-files/demultiplex/reference_vcfs/chr_filtered_2p_1kgenomes_GRCh38.vcf`
-  - `skip_remap = true`, `no_umi = false`, `known_genotypes = false`
+- Maternal/fetal Souporcell defaults:
+  - `skip_remap = false`, `no_umi = false`, `known_genotypes = false`
   - container: `/nfs/cellgeni/singularity/images/souporcell_v2.5-python_3.10-vireo_v0.5.8-cellsnp-lite_1.2.3-nextflow-compatible.sif`
 - Already has a `--check_sex` step using **XIST/RPS4Y1** expression — reusable prior art for the
   RPS4Y1 logic.
