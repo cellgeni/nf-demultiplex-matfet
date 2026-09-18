@@ -2,6 +2,13 @@
 
 Three layers, from fastest to most integrated.
 
+The Souporcell shell wrapper also has a lightweight argument regression test. It uses a fake
+`souporcell_pipeline.py`, so it neither reads a BAM nor runs Souporcell:
+
+```bash
+bash tests/test_souporcell_wrapper.sh
+```
+
 ## 1. Decision-engine unit tests (no dependencies beyond Python 3)
 
 The two-tier decision logic lives in pure, importable functions in
