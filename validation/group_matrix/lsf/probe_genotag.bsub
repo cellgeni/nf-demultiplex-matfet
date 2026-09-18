@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+#BSUB -J gm_genotag
+#BSUB -q normal
+#BSUB -n 4
+#BSUB -M 16000
+#BSUB -R "select[mem>=16000] rusage[mem=16000] span[hosts=1]"
+#BSUB -o %J.gm_genotag.out
+#BSUB -e %J.gm_genotag.err
+#BSUB -Ep /software/cellgen/cellgeni/etc/notify-slack.sh
+#
+# Determine which --genoTag the fixed-profile projection must use, by producing
+# a real discovery donor VCF rather than assuming. Runs genotype-free Vireo on
+# the smallest built group (D6) and reports the FORMAT fields it writes.
+#
+# This is an interface probe, NOT the Gate 5 one-donor verdict: D6 is forced to
+# K=2 here only to obtain a two-profile donor VCF to inspect.
+#
+#   OUTDIR=<ticket>/group_matrix/genotag_probe GROUP_DIR=<ticket>/group_matrix/D6/build_a/D6 \
+#     bsub < probe_genotag.bsub
+
+# Bootstrap before the strict flags: /etc/profile is not written for `set -u`.
+source /etc/profile >/dev/null || true
+module load "${CONTAINER_MODULE:-cellgen/singularity}" >/dev/null || true
+set -uo pipefail
+command -v singularity >/dev/null || { echo "ERROR: no container runtime on PATH" >&2; exit 1; }
+
+OUTDIR="${OUTDIR:?set OUTDIR on lustre}"
+GROUP_DIR="${GROUP_DIR:?set GROUP_DIR, the built <group_id> directory}"
+IMAGE="${IMAGE:-/nfs/cellgeni/singularity/images/souporcell_v2.5-python_3.10-vireo_v0.5.8-cellsnp-lite_1.2.3-nextflow-compatible.sif}"
+BIND="${SINGULARITY_BIND_PATHS:-/lustre,/nfs}"
+N_DONOR="${N_DONOR:-2}"
+mkdir -p "$OUTDIR"
+
+run() { singularity exec -B "$BIND" "$IMAGE" "$@"; }
+
+echo "[$(date -Is)] vireo genotype-free on $GROUP_DIR"
+run vireo \
+  --vartrixData="$GROUP_DIR/alt.mtx,$GROUP_DIR/ref.mtx,$GROUP_DIR/barcodes.tsv,$GROUP_DIR/variants.vcf.gz" \
+  --nDonor "$N_DONOR" \
+  --randSeed 1 \
+  --nproc 4 \
+  --outDir "$OUTDIR/vireo_out"
+echo "[$(date -Is)] vireo exit=$?"
+
+DONOR_VCF="$OUTDIR/vireo_out/GT_donors.vireo.vcf.gz"
+{
+  echo "=== files produced ==="
+  ls -la "$OUTDIR/vireo_out"
+  if [[ -f "$DONOR_VCF" ]]; then
+    echo "=== donor VCF ##FORMAT declarations ==="
+    run zcat "$DONOR_VCF" | grep '^##FORMAT' || echo "(none declared)"
+    echo "=== donor VCF column header and first record ==="
+    run zcat "$DONOR_VCF" | grep -v '^##' | head -2 | cut -c1-300
+    echo "=== FORMAT field observed ==="
+    run zcat "$DONOR_VCF" | grep -v '^#' | head -1 | cut -f9
+  else
+    echo "NO DONOR VCF WRITTEN"
+  fi
+
+  echo "=== which tags vireo accepts when reading a donor file ==="
+  run bash -c 'python -c "import vireoSNP, os; print(os.path.dirname(vireoSNP.__file__))"'
+  run bash -c 'grep -rn "genoTag\|GT_tag\|\x27GP\x27\|\x27PL\x27" $(python -c "import vireoSNP, os; print(os.path.dirname(vireoSNP.__file__))")/utils/vcf_utils.py | head -30'
+} >"$OUTDIR/genotag_findings.txt" 2>&1
+
+cat "$OUTDIR/genotag_findings.txt"
+echo "[$(date -Is)] done"

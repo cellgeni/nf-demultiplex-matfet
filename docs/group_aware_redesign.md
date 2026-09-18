@@ -471,6 +471,31 @@ Consequences for Gate 2 and Gate 3:
 - The clustering binary reporting 2.4 inside a v2.5-named image should be
   recorded in the validation report rather than silently accepted.
 
+### Resolved: which `--genoTag` to use
+
+Verified on 2026-09-19 by producing a real donor VCF, not from the manual.
+
+- `vireoSNP.vcf.parse_donor_GPb` accepts exactly `GT`, `GP`, or `PL`.
+- Vireo's own discovery output `GT_donors.vireo.vcf.gz` writes `GT:AD:DP:PL`.
+- Souporcell's `consensus.py` output `cluster_genotypes.vcf` writes
+  `GT:AO:RO:T:E:GO:GN`, with samples named `0`/`1` and `./.` for missing calls.
+- **Neither backend writes `GP`.** The earlier preference for "GP when present,
+  otherwise validated GT" is therefore not achievable and is superseded:
+  - Vireo discovery -> Vireo projection: use `--genoTag PL`, which is both
+    Vireo's default and the most informative field available, since it carries
+    genotype likelihoods rather than hard calls.
+  - Souporcell discovery -> Vireo projection: `--genoTag GT` is the only option.
+    `GO`/`GN` are Souporcell-specific and are not parsed by Vireo. Missing `./.`
+    calls are mapped to a uniform (1/3, 1/3, 1/3) prior, which is correct
+    behaviour but means the missing-call fraction must be reported as a QC
+    statistic for any Souporcell-derived profile.
+- Neither VCF declares `##FORMAT` header lines. Vireo parses them regardless,
+  but any third-party tool added later must be checked against this.
+
+The same job confirmed that Vireo consumes the harmonised group matrices
+directly via `--vartrixData=alt.mtx,ref.mtx,barcodes.tsv,variants.vcf.gz`, so
+the Gate 2 evidence contract holds end to end for the Vireo arm.
+
 ### Revised next validation gate
 
 Build harmonised group matrices from the existing per-library Vartrix outputs:
@@ -729,6 +754,10 @@ is justified; do not hide this limitation by rerunning de novo K=2 per library.
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
+- 2026-09-19: resolved the `--genoTag` question empirically (PL within Vireo,
+  GT across backends; GP is written by neither) and committed the harness on
+  branch `validation/group-matrix-core` as the shared base for the backend
+  branches.
 - 2026-09-19: dry-ran the variant-key contract over the real CW5 metadata
   without touching the matrices. All three libraries are internally consistent
   (VCF records equal matrix rows, barcodes equal columns, ALT and REF share
