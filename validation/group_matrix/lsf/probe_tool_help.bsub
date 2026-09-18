@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#BSUB -J tool_help_probe
+#BSUB -q normal
+#BSUB -n 1
+#BSUB -M 4000
+#BSUB -R "select[mem>=4000] rusage[mem=4000]"
+#BSUB -o %J.tool_help.out
+#BSUB -e %J.tool_help.err
+#BSUB -Ep /software/cellgen/cellgeni/etc/notify-slack.sh
+#
+# Capture the pinned image's CLI surface before any Gate 2 job, so backend
+# adapters are written against the real interface rather than a guessed one.
+# The head node cannot launch this image (FUSE_3.12), so it must run on LSF.
+#
+#   source /etc/profile >/dev/null 2>&1 || true; source ~/.bashrc >/dev/null 2>&1 || true
+#   OUTDIR=/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/group_matrix/tool_help \
+#     bsub < /nfs/cellgeni/batu/_repos/nf-demux-preg/validation/group_matrix/lsf/probe_tool_help.bsub
+# Execution hosts have no container runtime on PATH by default. cellgen/singularity
+# is the runtime the completed pipeline used; cellgen/apptainer is non-suid and
+# needs user namespaces that the exec hosts disallow, so it is only a fallback.
+# This must run BEFORE the strict flags: /etc/profile is not written to be
+# sourced under `set -u`, and an abort there would be silent.
+source /etc/profile >/dev/null || true
+module load "${CONTAINER_MODULE:-cellgen/singularity}" >/dev/null || true
+set -uo pipefail
+command -v singularity >/dev/null || { echo "ERROR: no singularity/apptainer on PATH" >&2; exit 1; }
+
+OUTDIR="${OUTDIR:?set OUTDIR on lustre}"
+IMAGE="${IMAGE:-/nfs/cellgeni/singularity/images/souporcell_v2.5-python_3.10-vireo_v0.5.8-cellsnp-lite_1.2.3-nextflow-compatible.sif}"
+# The image sees only what is bound: outputs live on lustre, the image on nfs.
+BIND="${SINGULARITY_BIND_PATHS:-/lustre,/nfs}"
+mkdir -p "$OUTDIR"
+
+echo "image: $IMAGE" | tee "$OUTDIR/probe.log"
+singularity exec -B "$BIND" "$IMAGE" cat /etc/os-release >>"$OUTDIR/probe.log" 2>&1
+
+probe() {
+  local name="$1"; shift
+  echo "=== $name ===" >>"$OUTDIR/probe.log"
+  singularity exec -B "$BIND" "$IMAGE" "$@" >"$OUTDIR/$name.help.txt" 2>&1
+  echo "exit=$? -> $OUTDIR/$name.help.txt" >>"$OUTDIR/probe.log"
+}
+
+# Which tool names actually exist in the image, so adapters call the real ones.
+singularity exec -B "$BIND" "$IMAGE" bash -c 'ls $(echo "$PATH" | tr ":" " ") 2>/dev/null | sort -u' \
+  >"$OUTDIR/image_path_binaries.txt" 2>&1
+grep -iE "soup|vireo|troublet|consensus|cellsnp|bgzip|tabix|minimap|vartrix" \
+  "$OUTDIR/image_path_binaries.txt" | sort -u >"$OUTDIR/image_relevant_binaries.txt" || true
+
+# The clustering binary is not on PATH under a plain name: locate the real
+# executables so the Gate 2 adapters call actual paths.
+singularity exec -B "$BIND" "$IMAGE" bash -c \
+  'find /opt -maxdepth 5 -type f -executable \( -name souporcell -o -name troublet -o -name vartrix -o -name "consensus*.py" \) -printf "%s\t%p\n"' \
+  >"$OUTDIR/image_souporcell_binaries.txt" 2>&1
+cat "$OUTDIR/image_souporcell_binaries.txt" >>"$OUTDIR/probe.log"
+
+while IFS=$'\t' read -r _size binpath; do
+  [[ -n "${binpath:-}" ]] || continue
+  name="found_$(basename "$binpath")_$(echo "$binpath" | md5sum | cut -c1-6)"
+  probe "$name" "$binpath" -h
+done <"$OUTDIR/image_souporcell_binaries.txt"
+
+probe vireo vireo -h
+probe cellsnp_lite cellsnp-lite -h
+probe souporcell_pipeline souporcell_pipeline.py -h
+probe troublet troublet -h
+probe consensus consensus.py -h
+probe bgzip bgzip --help
+probe tabix tabix --help
+
+cat "$OUTDIR/probe.log"

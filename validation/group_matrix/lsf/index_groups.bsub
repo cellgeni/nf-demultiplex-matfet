@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#BSUB -J group_matrix_index
+#BSUB -q normal
+#BSUB -n 1
+#BSUB -M 4000
+#BSUB -R "select[mem>=4000] rusage[mem=4000]"
+#BSUB -o %J.gm_index.out
+#BSUB -e %J.gm_index.err
+#BSUB -Ep /software/cellgen/cellgeni/etc/notify-slack.sh
+#
+# Write variants.vcf.gz/.tbi for already-built groups and refresh their
+# manifests. Needed only when the build itself ran without a container runtime
+# on PATH; the matrices are untouched.
+#
+#   GROUPS_TO_INDEX="CW5 CW4 D6" OUTDIR=.../group_matrix \
+#     bsub -w 'done(<build_job>)' < index_groups.bsub
+# Execution hosts have no container runtime on PATH by default. cellgen/singularity
+# is the runtime the completed pipeline used; cellgen/apptainer is non-suid and
+# needs user namespaces that the exec hosts disallow, so it is only a fallback.
+# This must run BEFORE the strict flags: /etc/profile is not written to be
+# sourced under `set -u`, and an abort there would be silent.
+source /etc/profile >/dev/null || true
+module load "${CONTAINER_MODULE:-cellgen/singularity}" >/dev/null || true
+set -euo pipefail
+command -v singularity >/dev/null || { echo "ERROR: no singularity/apptainer on PATH" >&2; exit 1; }
+
+HARNESS="${HARNESS:-/nfs/cellgeni/batu/_repos/nf-demux-preg/validation/group_matrix}"
+OUTDIR="${OUTDIR:?set OUTDIR on lustre}"
+GROUPS_TO_INDEX="${GROUPS_TO_INDEX:?set GROUPS_TO_INDEX, e.g. \"CW5 CW4 D6\"}"
+IMAGE="${IMAGE:-/nfs/cellgeni/singularity/images/souporcell_v2.5-python_3.10-vireo_v0.5.8-cellsnp-lite_1.2.3-nextflow-compatible.sif}"
+
+for group in $GROUPS_TO_INDEX; do
+  for build in build_a build_b; do
+    dir="$OUTDIR/$group/$build"
+    [[ -d "$dir/$group" ]] || { echo "skip $dir (not built)"; continue; }
+    echo "[$(date -Is)] indexing $dir/$group"
+    python3 "$HARNESS/build_group_matrix.py" \
+      --groups "$HARNESS/groups_validation.csv" --group-id "$group" \
+      --outdir "$dir" --index-only --singularity-image "$IMAGE" \
+      --singularity-bind "${SINGULARITY_BIND_PATHS:-/lustre,/nfs}"
+  done
+done
+
+echo "[$(date -Is)] indexing complete"

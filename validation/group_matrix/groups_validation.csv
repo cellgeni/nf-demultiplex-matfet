@@ -1,0 +1,10 @@
+group_id,sample_id,sample_role,expected_genotypes,souporcell_dir
+CW4,Embryo-Imp15289123,mixture,2,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/Embryo-Imp15289123
+CW4,Embryo-Imp15289124,mixture,2,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/Embryo-Imp15289124
+CW4,Embryo-Imp15289125,mixture,2,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/Embryo-Imp15289125
+CW4,Embryo-Imp15289126,mixture,2,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/Embryo-Imp15289126
+CW4,Embryo-Imp15289127,mixture,2,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/Embryo-Imp15289127
+CW5,Embryo-Imp15350362,mixture,2,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/Embryo-Imp15350362
+CW5,Embryo-Imp15350363,mixture,2,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/Embryo-Imp15350363
+CW5,Embryo-Imp15350364,mixture,2,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/Embryo-Imp15350364
+D6,FCA7167231,mixture,1,/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/results/souporcell/FCA7167231
