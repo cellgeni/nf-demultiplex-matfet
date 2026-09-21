@@ -815,6 +815,70 @@ per-library Souporcell baseline on D6 produced one dominant cluster plus a tiny
 forced second cluster (47 versus 1,193), which is closer to correct
 single-profile behaviour than an even split.
 
+## Gates 2, 3 and 5 result: 2026-09-21
+
+Both arms ran to completion on the CW5 group matrices and the D6 guard, 16 jobs
+in total, roughly 30-40 minutes wall clock per arm.
+
+### The redesign's core hypothesis is confirmed
+
+Joint group-level inference resolves the artificial per-library splits, in both
+backends independently, and correctly leaves a library with one profile:
+
+| Library | Per-library baseline | Souporcell joint | Vireo joint |
+|---|---|---|---|
+| Embryo-Imp15350362 | 911 / 5,465 | 915 / 5,427 | 854 / 5,466 |
+| Embryo-Imp15350363 | 3,277 / 3,124 | 7,383 / 9 | 7,567 / 9 |
+| Embryo-Imp15350364 | 1,583 / 1,683 | 3,754 / 3 | 3,848 / 0 |
+
+Souporcell's fitted ambient for the joint run is 1.80% (2.14% for the anchored
+run), against 84-96% for the artificial per-library splits. Both backends
+reproduce the trusted baseline on Embryo-Imp15350362 at 100% agreement over
+common high-confidence singlets.
+
+### Scoreboard against the acceptance criteria
+
+| Criterion | Souporcell | Vireo |
+|---|---|---|
+| Seed stability (ARI >= 0.95) | pass, ARI 1.0000 | pass, ARI 1.0000 |
+| Profile concordance across seeds (>= 0.95) | pass, 0.9999 | pass, 1.0000 |
+| Agreement with the per-library baseline on 362 (>= 0.95) | pass, 1.0000 | pass, 1.0000 |
+| Anchored discovery vs joint | pass, ARI 1.0000, genotypes 0.9850 | pass, ARI 1.0000, genotypes 0.9978 |
+| Projection vs joint (>= 0.90) | **fail, 0.52, ARI ~0** | pass, 1.0000, ARI 1.0000 |
+| Profiles held fixed during projection | **fail, 0.726 / 0.747** | pass |
+| D6 one-donor guard | pass, minor 0.034 | **fail, minor 0.462, 1,637 discordant loci** |
+
+### Souporcell cannot do infer-once/project-many
+
+Supplying both K=2 profiles through `--known_genotypes` did not hold them: the
+returned profiles matched the supplied ones at only 0.726 and 0.747, and the
+resulting assignments are unrelated to joint inference (ARI ~0). The
+distributions show what happened -- projection re-created the artificial split
+(3,332 / 3,033 in 363, 1,620 / 1,667 in 364) exactly where joint inference found
+a single profile. The profile-concordance figure alone would be confounded,
+because `consensus.py` recomputes genotypes from whichever cells it sees, but
+the assignment-level evidence is not. Souporcell's viable architecture here is
+joint inference over the whole group, which makes Gate 7 (scale to 10-15
+libraries) decisive for it rather than optional.
+
+### What Vireo's D6 failure does and does not mean
+
+Vireo split the single-donor control 694 / 804 with 1,637 well-supported
+discordant loci, meeting both conditions for a failed guard, and it reproduced
+under the adapter with `nInit 50`, so it is not a probe artefact.
+
+It is a failure of **K selection**, not of assignment quality: in the same run
+set, Vireo left CW5/363 and 364 as single-profile libraries when they were part
+of a group whose profiles were learned jointly. The D6 scenario corresponds to a
+pregnancy in which *no* library carries fetal cells, so the group itself has one
+genotype. That is a real risk for this project, but a narrower one than "Vireo
+splits single-profile libraries".
+
+Consequence for either backend: a two-profile call must be gated by explicit QC
+rather than by trusting the tool to decline. The obvious test, not yet run, is
+to compare K=1 against K=2 on D6 and check whether the model actually prefers
+the simpler explanation.
+
 ## Evidence and implementation notes
 
 - Souporcell performs remapping, variant calling, allele counting, clustering,
@@ -864,6 +928,11 @@ single-profile behaviour than an even split.
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
+- 2026-09-21: ran Gates 2, 3 and 5 for both backends on CW5 and D6. Group-level
+  inference resolved the artificial per-library splits in both backends.
+  Souporcell failed fixed-profile projection; Vireo failed the one-donor guard.
+  Neither backend passes every criterion, so the stop conditions do not yet
+  select a winner.
 - 2026-09-21: implemented the shared contract layer and both backend adapters
   on their branches, with self-tests passing and every parser verified against
   real backend output. Gate 2/3/5 DAGs are prepared but not submitted.
