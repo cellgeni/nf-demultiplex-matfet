@@ -63,7 +63,7 @@ public Nextflow workflow is still untouched, as intended.
 from the corresponding worktree:
 
 ```bash
-bash validation/group_matrix/lsf/run_gate2_3_cw5.sh   # in each worktree
+bash validation/group_matrix/lsf/run_gates_2_3_5.sh   # in each worktree
 ```
 
 Each arm fans out roughly seven jobs plus a comparison job that runs on
