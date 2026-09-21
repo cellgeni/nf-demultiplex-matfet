@@ -705,6 +705,63 @@ relearning profiles. If it cannot, Souporcell fails the required projection
 contract unless a small, independently validated likelihood-assignment adapter
 is justified; do not hide this limitation by rerunning de novo K=2 per library.
 
+## Wave B implementation state: 2026-09-21
+
+Branches, all from the reviewed shared base `validation/group-matrix-core`:
+
+- `validation/group-matrix-core` holds the matrix contract plus the shared
+  `common/` layer: the assignment-table schema and its validator, informative
+  locus counting from the matrices (so the metric is backend-independent),
+  profile-genotype comparison, permutation-invariant run comparison with the
+  acceptance thresholds, deterministic discovery-cell selection, column-view
+  subsetting, and conversion of the per-library baseline into the common table.
+- `validation/group-vireo` adds `backends/vireo_adapter.py` (discovery and
+  fixed-profile projection) with LSF wrappers and a Gate 2/3/5 DAG runner.
+- `validation/group-souporcell` adds `backends/souporcell_adapter.py`
+  (clustering, troublet, consensus) with the same gate structure.
+
+Worktrees live under `/nfs/cellgeni/batu/_repos/worktrees`. Nothing is pushed
+and `main` is untouched.
+
+Design points worth keeping:
+
+- A discovery subset is materialised as a real column view, not passed as a
+  shorter barcode list. Both backends require one barcode per matrix column, so
+  a bare subset list would silently misalign cells. The subset keeps the parent
+  variant axis, including uncovered loci, so a profile VCF learned on one subset
+  applies to any other without remapping. Verified: subsetting the CW5 group
+  matrix back to Embryo-Imp15350362's cells reproduces exactly its original
+  7,247 columns and 12,617,422 entries.
+- Informative loci per cell are counted from the group matrices, treating
+  Vartrix explicit zeros as absence of coverage, rather than taken from each
+  backend's own field. On D6 this independently reproduced Vireo's own median
+  n_vars of 1,776.
+- Souporcell's projection mode tests rather than assumes the fixed-profile
+  question: it supplies the discovery VCF through `--known_genotypes` and then
+  compares the returned consensus genotypes with the profiles supplied. If they
+  moved, it exits 3 and records a projection-contract failure. The gate runner
+  waits on `ended(...)` for projections so that finding is still compared and
+  reported instead of dropping out of the DAG.
+- The souporcell adapter parser reproduces the documented baseline exactly for
+  CW5/Embryo-Imp15350362: 911 and 5,465 singlets, 81 doublets, 790 unassigned.
+
+### Preliminary one-donor signal, not yet a Gate 5 verdict
+
+The `--genoTag` probe forced Vireo to K=2 on D6, the single-donor control, with
+default settings, one seed, and no locus filtering. Applying the Gate 5
+criteria to that output gives: minor high-confidence fraction 0.462 (threshold
+0.05) and 1,637 well-supported discordant loci (threshold 100). Both conditions
+are met, which is the documented definition of a failed one-donor guard.
+
+This must be reproduced through the adapter before it is treated as a result,
+because the probe was an interface test: no minimum-coverage or minimum-locus
+filtering was applied, only one initialisation was run, and no ambient handling
+was configured. It is recorded here because it is the first evidence bearing
+directly on the backend choice, and because the contrast is notable: the
+per-library Souporcell baseline on D6 produced one dominant cluster plus a tiny
+forced second cluster (47 versus 1,193), which is closer to correct
+single-profile behaviour than an even split.
+
 ## Evidence and implementation notes
 
 - Souporcell performs remapping, variant calling, allele counting, clustering,
@@ -754,6 +811,9 @@ is justified; do not hide this limitation by rerunning de novo K=2 per library.
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
+- 2026-09-21: implemented the shared contract layer and both backend adapters
+  on their branches, with self-tests passing and every parser verified against
+  real backend output. Gate 2/3/5 DAGs are prepared but not submitted.
 - 2026-09-19: resolved the `--genoTag` question empirically (PL within Vireo,
   GT across backends; GP is written by neither) and committed the harness on
   branch `validation/group-matrix-core` as the shared base for the backend
