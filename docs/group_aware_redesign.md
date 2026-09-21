@@ -17,8 +17,10 @@ marker panel, uncertainty-preserving label logic, and original pipeline
 architecture, but its statements that every library is processed independently
 and K=2 must always be recovered per library are no longer current.
 
-No production redesign has been implemented. The present pipeline is still the
-per-library Souporcell K=2 baseline with downstream marker labelling.
+No production redesign has been implemented: the pipeline is still the
+per-library Souporcell K=2 baseline with downstream marker labelling. The
+group-aware work so far is validation-only code on branches, outside the public
+workflow.
 
 ## Why the current design needs to change
 
@@ -53,13 +55,26 @@ contain only one detectable profile rather than forcing two clusters.
 
 ## Handoff: resume here
 
-The validation-only group-matrix harness now exists at
-`validation/group_matrix/` (see its README). It implements the group-matrix
-technical contract below, passes its synthetic self-test, and has LSF wrappers
-prepared but **not submitted**. The immediate task is therefore to run the tool
-help probe and the CW5 build under LSF, then use that evidence to decide whether
-Souporcell or Vireo merits a production implementation. The public Nextflow
-workflow is still untouched, as intended.
+Gate 1 is complete for CW4, CW5 and D6, the pinned image's CLI is captured, and
+both backend adapters exist on their branches with self-tests passing. The
+public Nextflow workflow is still untouched, as intended.
+
+**The immediate task is to submit the Gate 2/3/5 DAGs**, one command per arm,
+from the corresponding worktree:
+
+```bash
+bash validation/group_matrix/lsf/run_gate2_3_cw5.sh   # in each worktree
+```
+
+Each arm fans out roughly seven jobs plus a comparison job that runs on
+completion and writes JSON verdicts under
+`<ticket>/group_matrix/gate2_{vireo,souporcell}/comparisons/`. The two arms are
+independent and can run concurrently. Thresholds live in
+`common/compare_runs.py`; do not adjust one to make a run pass.
+
+After that, in order: read the comparison verdicts against the stop conditions
+below, then Gate 4 (CW4 across discovery subsets) only if CW5 passes, then Gate
+6 (remapping A/B) only if Vireo remains promising, then Gate 7 (scale).
 
 Current locations:
 
@@ -333,32 +348,45 @@ Names are provisional:
 
 ## Repository and branch state
 
-As recorded on 2026-09-18, the repository is on `main` at `2fc50e4` with
-uncommitted work. Modified paths are `ROADMAP.md`, `docs/testing.md`, `main.nf`,
-`modules/local/souporcell.nf`, `nextflow.config`, and the nf-demultiplex
-submodule. Untracked paths include `docs/dag.md`, `docs/dag.png`, `docs/dag.svg`,
-this document, and `tests/test_souporcell_wrapper.sh`. Inside nf-demultiplex,
-`bin/souporcell.sh` is modified relative to submodule commit `36f2d7f`.
+As recorded on 2026-09-21. `main` is still at `2fc50e4` and nothing has been
+pushed; every decision about what reaches `main` is still open.
 
-These changes include the corrected Souporcell boolean handling and belong to
-the current work. Preserve and inspect them before creating branches; do not
-clean, reset, or silently reimplement them.
+Branches, all in this repository, with worktrees below
+`/nfs/cellgeni/batu/_repos/worktrees`:
 
-No experimental redesign branch has been created. When implementation begins,
-use worktrees below `/nfs/cellgeni/batu/_repos/worktrees` and share one reviewed
-matrix-contract base. Proposed short-lived branch roles are:
+- `validation/group-matrix-core` at `9f004c2` -- the reviewed shared base. It
+  carries the pre-existing pipeline work that was uncommitted on `main` plus the
+  matrix contract and the `common/` layer. Commits, oldest first:
+  `608563a` enforce container execution and keep remapping enabled,
+  `36ff355` Souporcell wrapper argument regression test,
+  `ac13a0e` rendered pipeline DAG documentation,
+  `803bcf6` group-matrix harness and this handoff document,
+  `18bd31a` verified genotype tag choice,
+  `fe93051` shared assignment/genotype/comparison contract,
+  `ef81c27` deterministic discovery-cell selection,
+  `47c4e11` subsets as column views,
+  `2234029` per-library baseline conversion,
+  `9f004c2` wave B state and the preliminary one-donor signal.
+- `validation/group-vireo` -- Vireo discovery/projection adapter, LSF wrappers,
+  Gate 2/3/5 runner, merged up to date with the base.
+- `validation/group-souporcell` -- Souporcell clustering/troublet/consensus
+  adapter with the projection-contract check, same gate structure.
 
-- `validation/group-matrix-core`: harmonisation, integrity checks, common QC,
-  and fixtures only;
-- `validation/group-souporcell`: Souporcell clustering/consensus adapter on top
-  of the shared contract;
-- `validation/group-vireo`: Vireo discovery/projection adapter on top of the
-  same contract;
-- a final integration branch created from the selected backend, rather than
-  merging both experimental workflows into production.
+A final integration branch should be created from the selected backend rather
+than merging both experimental arms into production.
 
-Before creating worktrees, decide with the user how the current dirty changes
-will be captured. Do not create branches from an assumed clean `main`.
+### Still uncommitted, deliberately
+
+- The nf-demultiplex submodule is dirty: `bin/souporcell.sh` differs from
+  submodule commit `36f2d7f` by +36/-20 lines and contains the corrected
+  Souporcell boolean handling. It is a separate repository, so it needs its own
+  commit there before this repository can record a new pointer. Preserve it; do
+  not clean, reset, or reimplement it.
+- The repository root holds untracked home-style dotfiles that appear to have
+  landed there by accident: `.bashrc`, `.zshrc`, `.profile`, `.bash_profile`,
+  `.gitconfig`, `.ripgreprc`, plus `.idea/`, `.vscode/`, `.claude/` and
+  `.mcp.json`. They are not part of this work and were left alone; they are
+  candidates for `.gitignore` or removal.
 
 ## First expanded baseline run: 2026-09-18
 
@@ -744,6 +772,31 @@ Design points worth keeping:
   reported instead of dropping out of the DAG.
 - The souporcell adapter parser reproduces the documented baseline exactly for
   CW5/Embryo-Imp15350362: 911 and 5,465 singlets, 81 doublets, 790 unassigned.
+
+### Where the artefacts are
+
+Under the ticket, `/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805`:
+
+```text
+group_matrix/
+  run_wave_a.sh              # submits the Gate 1 builds and the CLI probe
+  logs/                      # LSF stdout/stderr for every job
+  tool_help/                 # captured -h output, plus the image's binary list
+  genotag_probe/vireo_out/   # the donor VCF that resolved --genoTag
+  CW5/ CW4/ D6/              # each with build_a/ and build_b/ (determinism)
+  gate2_vireo/               # created by the Vireo gate runner
+  gate2_souporcell/          # created by the Souporcell gate runner
+```
+
+Each `build_*/<group_id>/` holds `alt.mtx`, `ref.mtx`, `variants.vcf`(`.gz`,
+`.tbi`), `barcodes.tsv`, `barcode_provenance.tsv`, `library_offsets.tsv`,
+`matrix_qc.tsv`, `manifest.json`, and `loci_per_cell.tsv` once an adapter or the
+cell selector has computed it.
+
+Observed Gate 1 cost, for planning: D6 (1 library) 28 s and 200 MB peak RSS;
+CW5 (3 libraries) and CW4 (5 libraries) a few minutes each, well inside the
+16 GB and 32 GB requested. Output size is roughly 650 MB per matrix for CW5 and
+1.9 GB for CW4, doubled because two replicate builds are written.
 
 ### Preliminary one-donor signal, not yet a Gate 5 verdict
 
