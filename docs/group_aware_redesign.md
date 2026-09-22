@@ -800,6 +800,16 @@ CW5 (3 libraries) and CW4 (5 libraries) a few minutes each, well inside the
 
 ### Preliminary one-donor signal, not yet a Gate 5 verdict
 
+**Premise under revision (2026-09-22).** The description of D6/FCA7167231 as a
+single-donor control came from this document and was questioned by the user, who
+states it is not a single donor. What the measurements show is that the K=2
+split Vireo found in D6 is not reproducible across disjoint halves and that its
+profiles explain held-out cells as blends; that stands either way. The
+*interpretation* does not: if D6 contains more than one donor, then Souporcell's
+51-versus-1,256 result is a missed genotype rather than correct restraint, and
+Gate 5 was testing sensitivity, not specificity. Resolve D6's true composition
+and tissue before treating any Gate 5 verdict as settled.
+
 The `--genoTag` probe forced Vireo to K=2 on D6, the single-donor control, with
 default settings, one seed, and no locus filtering. Applying the Gate 5
 criteria to that output gives: minor high-confidence fraction 0.462 (threshold
@@ -960,6 +970,49 @@ Consequences:
   follow-up is a split-half restricted to Embryo-Imp15350362, the one library
   with a real minority population, learning on one half and projecting the other.
 
+## Fetal retention under fixed-profile projection: 2026-09-22
+
+Restricted to Embryo-Imp15350362, the only library with a genuine minority
+population, varying how much of that population the profile is learned from.
+Half B (3,623 cells) is projected in both arms; the reference is joint CW5
+inference restricted to the same cells.
+
+| Profiles learned on | Fetal cells in training | Retention | Fetal cells lost to doublet | Doublet fraction |
+|---|---:|---:|---:|---|
+| all of 362 (7,247 cells) | ~915 | **0.9955** (445/447) | 2 | 0.011 -> 0.008 |
+| half A only (3,624 cells) | ~458 | **0.3177** (142/447) | 289 | 0.011 -> 0.085 |
+
+Both arms score cell agreement **1.0000**, which is exactly why the retention
+metric was needed.
+
+The conclusion is not that fixed-profile projection is broken. With a
+well-learned minority profile it is close to perfect. What breaks it is thin
+training support for the minority: halving the fetal cells available to
+discovery (about 915 to about 458) collapses retention from 99.6% to 31.8%, and
+the lost cells become doublets rather than unassigned, because a noisy minority
+profile makes a genuine fetal cell look like a blend of the two profiles.
+
+Caveat on the first arm: half B's cells are inside the full-362 training set, so
+0.9955 is an upper bound rather than a held-out result. The clean design for
+separating "more training cells" from "training overlap" is a training-size
+curve -- learn on 25%, 50% and 75% of the library and project the same held-out
+25% each time. The 31.8% figure is the honest held-out number at half strength,
+and it agrees with the 25% (114/456) seen in the earlier CW5 split-half, which
+also trained at half strength.
+
+Consequences for the design:
+
+- Discovery must include enough of the minority population. The group-aware
+  architecture already does this when the fetal-rich library is part of
+  discovery, which is the intended behaviour; it argues against discovery
+  subsets that thin out the fetal evidence, and so against a balanced per-library
+  cell cap that would sample down the one library carrying fetal cells.
+- **Doublet inflation is a usable production alarm.** A projection that raises
+  the doublet fraction (here 0.011 to 0.085) is signalling an under-trained
+  profile, not finding real doublets. Report it alongside retention.
+- Vireo's Gate 3 pass stands, with the qualification that it holds only when the
+  minority profile has adequate support.
+
 ## Evidence and implementation notes
 
 - Souporcell performs remapping, variant calling, allele counting, clustering,
@@ -1009,7 +1062,11 @@ Consequences:
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
-- 2026-09-22: showed Vireo's D6 split is an artefact (locus replication 0.139
+- 2026-09-22: established that fixed-profile projection retains 99.6% of fetal
+  cells when the profile is learned from the full population but only 31.8% at
+  half strength, with the lost cells becoming doublets. Added a
+  minority-retention criterion, since cell agreement scored 1.0000 in both arms.
+- 2026-09-22: showed Vireo's D6 split is not reproducible (locus replication 0.139
   against 0.872 for CW5; 93.6% of held-out cells called doublet), dropped the
   K sweep as decision-relevant, and found that fixed-profile projection converts
   about 72% of joint-called fetal cells into doublets while still scoring 1.0000
