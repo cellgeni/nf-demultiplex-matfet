@@ -168,6 +168,54 @@ with tempfile.TemporaryDirectory() as tmp:
     check("missing VCFs leave genotype criteria unevaluated rather than passed",
           "genotype_concordance" not in report_no_vcf["verdicts"])
 
+    # --- minority retention: the blind spot that agreement alone misses ------
+    # Reference: 20 majority + 5 minority cells, all high-confidence singlets.
+    ref = [row(f"libA::{i}", "libA", "singlet", "profile_1", 0.99) for i in range(20)]
+    ref += [row(f"libA::m{i}", "libA", "singlet", "profile_2", 0.99) for i in range(5)]
+    # Test run keeps the majority but demotes every minority cell to doublet.
+    test = [row(f"libA::{i}", "libA", "singlet", "profile_1", 0.99) for i in range(20)]
+    test += [row(f"libA::m{i}", "libA", "doublet", "", 0.4, 0.99) for i in range(5)]
+
+    matching = cr.best_profile_matching(ref, test)
+    check("agreement is blind to a discarded minority",
+          matching["concordance"] == 1.0, str(matching["concordance"]))
+    retention = cr.minority_retention(ref, test, matching["mapping"])
+    check("retention catches the discarded minority",
+          retention["retention"] == 0.0 and retention["fates"]["doublet"] == 5,
+          str(retention))
+    check("retention reports doublet inflation",
+          abs(retention["doublet_inflation"] - 0.2) < 1e-9,
+          str(retention["doublet_inflation"]))
+
+    # A test run that keeps the minority scores full retention.
+    kept = [row(f"libA::{i}", "libA", "singlet", "profile_1", 0.99) for i in range(20)]
+    kept += [row(f"libA::m{i}", "libA", "singlet", "profile_2", 0.99) for i in range(5)]
+    retention_ok = cr.minority_retention(ref, kept, cr.best_profile_matching(ref, kept)["mapping"])
+    check("retention is 1.0 when the minority survives", retention_ok["retention"] == 1.0,
+          str(retention_ok["retention"]))
+
+    # Swapped labels must not look like a lost minority.
+    swapped = [row(f"libA::{i}", "libA", "singlet", "profile_2", 0.99) for i in range(20)]
+    swapped += [row(f"libA::m{i}", "libA", "singlet", "profile_1", 0.99) for i in range(5)]
+    retention_swap = cr.minority_retention(
+        ref, swapped, cr.best_profile_matching(ref, swapped)["mapping"])
+    check("retention is permutation invariant", retention_swap["retention"] == 1.0,
+          str(retention_swap["retention"]))
+
+    # A single-profile reference has no minority to retain.
+    single = [row(f"libA::{i}", "libA", "singlet", "profile_1", 0.99) for i in range(10)]
+    check("single-profile reference is not evaluable",
+          cr.minority_retention(single, single, {"profile_1": "profile_1"})["evaluable"] is False)
+
+    # End to end: the verdict must fail even though agreement is perfect.
+    table_ref = os.path.join(tmp, "ref.tsv"); at.write_table(table_ref, ref)
+    table_test = os.path.join(tmp, "test.tsv"); at.write_table(table_test, test)
+    rep = cr.compare(table_ref, table_test, None, None, "projection-vs-joint")
+    check("a discarded minority fails the criteria despite perfect agreement",
+          rep["verdicts"]["cell_concordance"]["passed"] is True
+          and rep["verdicts"]["minority_retention"]["passed"] is False,
+          str(rep["verdicts"]))
+
     # --- informative loci counted from real matrix shapes -------------------
     group_dir = os.path.join(tmp, "GRP")
     os.makedirs(group_dir)

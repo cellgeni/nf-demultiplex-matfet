@@ -35,6 +35,11 @@ THRESHOLDS = {
     "ari_min_subsets": 0.90,           # Gate 4, across discovery subsets
     "genotype_concordance_min": 0.95,
     "discordant_loci_min": 100,        # per accepted profile pair
+    # Provisional. Cell agreement can be 1.0 while a projection discards the
+    # minority population, because demoted cells stop being "common
+    # high-confidence singlets" and leave the comparison. Retention is measured
+    # separately for that reason. Any change must be justified in the report.
+    "minority_retention_min": 0.80,
 }
 
 
@@ -114,6 +119,72 @@ def best_profile_matching(rows_a: list[dict], rows_b: list[dict]) -> dict:
     return best
 
 
+def minority_retention(rows_ref: list[dict], rows_test: list[dict],
+                       mapping: dict) -> dict:
+    """Does the test run keep the reference run's minority population?
+
+    The minority profile is the biologically interesting one here: it is the
+    candidate fetal population. Cell agreement does not measure this, so the
+    fate of every reference minority cell is tracked explicitly.
+    """
+    by_barcode_test = {row["group_barcode"]: row for row in rows_test}
+
+    counts: dict[str, int] = {}
+    for row in rows_ref:
+        if is_high_confidence(row):
+            counts[row["profile"]] = counts.get(row["profile"], 0) + 1
+    if len(counts) < 2:
+        return {"evaluable": False,
+                "note": "the reference run has fewer than two profiles, so there "
+                        "is no minority population to retain"}
+
+    minority = min(counts, key=counts.get)
+    majority = max(counts, key=counts.get)
+    expected = mapping.get(minority)
+
+    fates = {"singlet_minority": 0, "singlet_other_profile": 0, "doublet": 0,
+             "unassigned": 0, "low_confidence_singlet": 0, "absent": 0}
+    for row in rows_ref:
+        if not (is_high_confidence(row) and row["profile"] == minority):
+            continue
+        other = by_barcode_test.get(row["group_barcode"])
+        if other is None:
+            fates["absent"] += 1
+        elif other["status"] == "doublet":
+            fates["doublet"] += 1
+        elif other["status"] == "unassigned":
+            fates["unassigned"] += 1
+        elif not is_high_confidence(other):
+            fates["low_confidence_singlet"] += 1
+        elif expected is not None and other["profile"] == expected:
+            fates["singlet_minority"] += 1
+        else:
+            fates["singlet_other_profile"] += 1
+
+    n_minority = counts[minority]
+    common = [row for row in rows_ref if row["group_barcode"] in by_barcode_test]
+    ref_doublets = sum(1 for row in common if row["status"] == "doublet")
+    test_doublets = sum(1 for row in common
+                        if by_barcode_test[row["group_barcode"]]["status"] == "doublet")
+
+    return {
+        "evaluable": True,
+        "minority_profile_in_reference": minority,
+        "majority_profile_in_reference": majority,
+        "n_reference_minority_high_confidence": n_minority,
+        "matched_profile_in_test": expected,
+        "fates": fates,
+        "retention": fates["singlet_minority"] / n_minority if n_minority else 0.0,
+        "n_common_cells": len(common),
+        "reference_doublet_fraction": ref_doublets / len(common) if common else 0.0,
+        "test_doublet_fraction": test_doublets / len(common) if common else 0.0,
+        "doublet_inflation": (
+            (test_doublets / len(common)) - (ref_doublets / len(common))
+            if common else 0.0
+        ),
+    }
+
+
 def per_library_agreement(rows_a: list[dict], rows_b: list[dict], mapping: dict) -> dict:
     by_barcode_b = {row["group_barcode"]: row for row in rows_b}
     result: dict[str, dict] = {}
@@ -147,6 +218,8 @@ def compare(table_a: str, table_b: str, vcf_a: str | None, vcf_b: str | None,
         "profile_matching": {key: value for key, value in matching.items()
                              if key != "common_barcodes"},
         "per_library_agreement": per_library_agreement(rows_a, rows_b, matching["mapping"]),
+        # A is the reference (e.g. joint inference), B the run under test.
+        "minority_retention": minority_retention(rows_a, rows_b, matching["mapping"]),
     }
 
     if vcf_a:
@@ -174,6 +247,13 @@ def compare(table_a: str, table_b: str, vcf_a: str | None, vcf_b: str | None,
         matching.get("adjusted_rand_index"), ari_min,
         f"adjusted Rand index >= {ari_min}",
         matching["n_common_high_confidence"] > 0,
+    )
+
+    retention = report["minority_retention"]
+    verdicts["minority_retention"] = _verdict(
+        retention.get("retention"), THRESHOLDS["minority_retention_min"],
+        f"minority-profile retention >= {THRESHOLDS['minority_retention_min']}",
+        retention.get("evaluable", False),
     )
 
     if "genotype_concordance" in report:
@@ -237,6 +317,13 @@ def main(argv: list[str] | None = None) -> int:
     if "genotype_concordance" in report:
         genotype = report["genotype_concordance"]
         print(f"  genotype concordance: {genotype['concordance']:.4f} over {genotype['n_loci']} loci")
+    retention = report["minority_retention"]
+    if retention.get("evaluable"):
+        print(f"  minority retention: {retention['retention']:.4f} of "
+              f"{retention['n_reference_minority_high_confidence']} reference minority cells "
+              f"(fates: {retention['fates']})")
+        print(f"  doublet fraction: {retention['reference_doublet_fraction']:.4f} -> "
+              f"{retention['test_doublet_fraction']:.4f}")
     for name, entry in report["verdicts"].items():
         state = "PASS" if entry["passed"] else ("n/a " if not entry["evaluated"] else "FAIL")
         print(f"  [{state}] {entry['description']} (observed {entry['observed']})")
