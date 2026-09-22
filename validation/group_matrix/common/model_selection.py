@@ -39,7 +39,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from build_group_matrix import open_mtx_body  # noqa: E402
-from genotype_vcf import between_run_concordance, within_run_discordance  # noqa: E402
+from genotype_vcf import (  # noqa: E402
+    between_run_concordance,
+    discordant_locus_replication,
+    within_run_discordance,
+)
 
 LOGLIK_RE = re.compile(r"logLik[:=]\s*(-?[\d.eE+]+)")
 
@@ -143,6 +147,12 @@ def split_half(vcf_a: str, vcf_b: str, label: str) -> dict:
         "n_loci_compared": concordance["n_loci"],
         "profile_mapping": concordance["mapping"],
     })
+    # The decisive statistic: do the same loci separate the profiles in both
+    # halves? Plain genotype concordance cannot answer this, because with a
+    # single donor both profiles are near-copies and everything looks
+    # concordant whichever way they are paired.
+    result["discordant_locus_replication"] = discordant_locus_replication(vcf_a, vcf_b)
+
     for key, path in (("within_a", vcf_a), ("within_b", vcf_b)):
         within = within_run_discordance(path)
         result[key] = {
@@ -200,11 +210,18 @@ def main(argv: list[str] | None = None) -> int:
         if "error" in entry:
             print(f"split-half {entry['label']}: ERROR {entry['error']}")
             continue
-        print(f"split-half {entry['label']}: genotype concordance "
-              f"{entry['genotype_concordance']:.4f} over {entry['n_loci_compared']} loci "
-              f"(within-half discordant loci: "
-              f"{entry['within_a']['min_discordant_loci_over_pairs']} / "
-              f"{entry['within_b']['min_discordant_loci_over_pairs']})")
+        rep = entry.get("discordant_locus_replication", {})
+        print(f"split-half {entry['label']}:")
+        print(f"  genotype concordance {entry['genotype_concordance']:.4f} over "
+              f"{entry['n_loci_compared']} loci (not the discriminator; see below)")
+        print(f"  separating loci: {rep.get('n_discordant_a')} in half A, "
+              f"{rep.get('n_discordant_b')} in half B, "
+              f"{rep.get('n_discordant_in_both')} in both")
+        if rep.get("jaccard") is not None:
+            print(f"  replication: jaccard={rep['jaccard']:.4f}, "
+                  f"A replicated={rep.get('fraction_of_a_replicated', 0):.4f}, "
+                  f"chance overlap={rep.get('expected_overlap_by_chance', 0):.1f}, "
+                  f"enrichment={rep.get('enrichment_over_chance')}")
     print(f"report: {args.out}")
     return 0
 

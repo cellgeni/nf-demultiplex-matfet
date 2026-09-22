@@ -218,3 +218,73 @@ def between_run_concordance(path_a: str, path_b: str,
     best["missing_gt_fraction_a"] = a["missing_gt_fraction"]
     best["missing_gt_fraction_b"] = b["missing_gt_fraction"]
     return best
+
+def discordant_locus_set(vcf_path: str) -> dict:
+    """Which loci actually separate this run's two profiles.
+
+    Needed because between-run genotype concordance is *not* a valid test of
+    whether a second profile is real. When a group holds one donor, both
+    inferred profiles are near-copies of that donor's genotype, so any pairing
+    across two runs looks highly concordant. The discriminating question is
+    whether the *difference* between the profiles replicates: a real second
+    donor is separated by the same loci in every subset of cells, whereas a
+    noise-driven split is separated by different loci each time.
+    """
+    parsed = read_profile_vcf(vcf_path)
+    samples = parsed["samples"]
+    if len(samples) < 2:
+        return {"n_profiles": len(samples), "loci": set(), "n_confident_loci": 0}
+
+    loci = set()
+    confident = 0
+    for key, record in parsed["calls"].items():
+        a, b = record[0], record[1]
+        if a is None or b is None:
+            continue
+        confident += 1
+        if a[0] != b[0]:
+            loci.add(key)
+    return {"n_profiles": len(samples), "loci": loci, "n_confident_loci": confident}
+
+
+def discordant_locus_replication(vcf_a: str, vcf_b: str) -> dict:
+    """Do the same loci separate the profiles in two disjoint cell subsets?
+
+    Reports the overlap of the two discordant-locus sets, restricted to loci
+    confidently called in both runs so that coverage differences do not masquer-
+    ade as disagreement. `jaccard` near 1 means the separating genotype is
+    reproducible; near 0 means each subset invented its own split.
+    """
+    a = discordant_locus_set(vcf_a)
+    b = discordant_locus_set(vcf_b)
+    if a["n_profiles"] < 2 or b["n_profiles"] < 2:
+        return {"error": "both runs must contain at least two profiles"}
+
+    parsed_a = read_profile_vcf(vcf_a)
+    parsed_b = read_profile_vcf(vcf_b)
+
+    def confident_keys(parsed):
+        return {key for key, record in parsed["calls"].items()
+                if record[0] is not None and record[1] is not None}
+
+    shared = confident_keys(parsed_a) & confident_keys(parsed_b)
+    set_a = a["loci"] & shared
+    set_b = b["loci"] & shared
+    union = set_a | set_b
+    intersection = set_a & set_b
+
+    # What overlap would chance alone give, if each set were drawn at random
+    # from the shared loci? Reported so a modest Jaccard is interpretable.
+    expected = (len(set_a) * len(set_b) / len(shared)) if shared else 0.0
+
+    return {
+        "n_shared_confident_loci": len(shared),
+        "n_discordant_a": len(set_a),
+        "n_discordant_b": len(set_b),
+        "n_discordant_in_both": len(intersection),
+        "jaccard": len(intersection) / len(union) if union else 0.0,
+        "fraction_of_a_replicated": len(intersection) / len(set_a) if set_a else 0.0,
+        "fraction_of_b_replicated": len(intersection) / len(set_b) if set_b else 0.0,
+        "expected_overlap_by_chance": expected,
+        "enrichment_over_chance": (len(intersection) / expected) if expected > 0 else None,
+    }
