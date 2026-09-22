@@ -879,6 +879,87 @@ rather than by trusting the tool to decline. The obvious test, not yet run, is
 to compare K=1 against K=2 on D6 and check whether the model actually prefers
 the simpler explanation.
 
+## Is Vireo's D6 split real? 2026-09-22
+
+Two tests, with CW5 as a positive control so the numbers are interpretable. The
+K sweep originally planned alongside them was dropped as decision-relevant: a
+pregnancy group always contains a mother, so K=1 is not a production scenario,
+and the question "is the second profile justified?" is answered directly by the
+tests below without any penalised-likelihood assumptions.
+
+### Split-half locus replication: the split does not replicate
+
+Learn K=2 independently on two disjoint halves of the cells, then ask whether
+the *same loci* separate the profiles in both halves. Genotype concordance
+between halves is **not** the right statistic -- with one donor both profiles are
+near-copies, so any pairing looks concordant (D6 scores 0.947 there).
+
+| Group | Separating loci, half A | half B | in both | Jaccard | Fraction of A replicated |
+|---|---:|---:|---:|---:|---:|
+| CW5 (positive control) | 11,549 | 11,581 | 10,774 | **0.872** | **0.933** |
+| D6 (negative control) | 453 | 479 | 114 | **0.139** | **0.252** |
+
+A real second genotype replicates on 93% of its separating loci; D6's split
+replicates on 25%. The statistic separates the two cases cleanly and is the
+basis for a usable Gate 5 procedure.
+
+Do not use the "enrichment over chance" column as the criterion: chance overlap
+scales with set size, so D6 scores 8.6x and CW5 only 4.7x, inverting the
+ranking. Jaccard and the replicated fraction are the metrics to keep.
+
+### Held-out projection: consistent with the same conclusion
+
+Projecting each group's half B against half A's fixed profiles:
+
+| Group | Confident singlets | Doublet fraction | Unassigned |
+|---|---|---:|---:|
+| CW5 | 8,832 (117 / 8,715) | 0.038 | 0.049 |
+| D6 | 12 (4 / 8) | **0.936** | 0.048 |
+
+D6's profiles explain almost no held-out cell as a singlet: 93.6% look like
+blends, which is what two near-copies of one genotype produce. Vireo's D6 split
+is therefore an artefact by two independent measures, which is the better
+outcome for Vireo -- the one-donor guard becomes a QC step rather than a
+disqualification.
+
+Also recorded: Vireo 0.5.8 **cannot fit K=1 at all**. `--nDonor 1` crashes in
+`vireo_doublet.add_doublet_GT` (indexing a 1-D array as 2-D). Protection against
+a manufactured second profile can never come from the tool declining, so it must
+be external QC regardless of which backend is chosen.
+
+### The positive control exposed a projection defect
+
+Among the half-B cells that joint inference calls fetal, fixed-profile
+projection recovers only a minority as singlets:
+
+| Fate under projection of the 456 joint-called fetal cells | Count |
+|---|---:|
+| singlet on the fetal profile | 114 |
+| **doublet** | **328** |
+| unassigned | 14 |
+
+Projection converts about 72% of the fetal population into doublets. For
+CW5/Embryo-Imp15350362 it calls 116 fetal cells where joint inference calls 447.
+
+Critically, the Gate 3 criterion did not notice: agreement on common
+high-confidence singlets is **1.0000**, because cells that projection demotes to
+doublet stop being "common high-confidence singlets" and silently leave the
+comparison. The earlier Gate 3 pass for Vireo on 363 and 364 is therefore weaker
+evidence than it appeared -- those libraries have no minority population to lose,
+so the metric could not detect this failure mode there.
+
+Consequences:
+
+- The acceptance criteria need a companion metric to cell agreement: retention
+  of the minority profile, defined as the fraction of joint-called minority
+  cells that projection keeps as minority singlets, reported alongside the
+  doublet-rate inflation. Agreement alone can be 1.0 while the fetal population
+  is discarded, which is precisely the biology this pipeline exists to measure.
+- A fair test of fetal retention needs the profile learned from a full minority
+  population, not half of it: here half A held only ~430 fetal cells. The clean
+  follow-up is a split-half restricted to Embryo-Imp15350362, the one library
+  with a real minority population, learning on one half and projecting the other.
+
 ## Evidence and implementation notes
 
 - Souporcell performs remapping, variant calling, allele counting, clustering,
@@ -928,6 +1009,11 @@ the simpler explanation.
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
+- 2026-09-22: showed Vireo's D6 split is an artefact (locus replication 0.139
+  against 0.872 for CW5; 93.6% of held-out cells called doublet), dropped the
+  K sweep as decision-relevant, and found that fixed-profile projection converts
+  about 72% of joint-called fetal cells into doublets while still scoring 1.0000
+  on the Gate 3 criterion.
 - 2026-09-21: ran Gates 2, 3 and 5 for both backends on CW5 and D6. Group-level
   inference resolved the artificial per-library splits in both backends.
   Souporcell failed fixed-profile projection; Vireo failed the one-donor guard.
