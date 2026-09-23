@@ -1037,6 +1037,78 @@ Souporcell cannot hold profiles fixed and must re-infer jointly over the whole
 group, while Vireo projects well provided the minority profile has adequate
 training support.
 
+## Gate 4 result: CW4 stays unresolved, 2026-09-23
+
+CW4 discovery on all five libraries plus four subsets chosen so no library
+appears in every trio (`trio_early` 123/124/125, `trio_late` 125/126/127,
+`trio_mixed` 123/125/127, `balanced2k` = 2,000 most informative cells per
+library), in both backends, with projection of all CW4 cells against the
+`trio_early` profiles. Reports: `<ticket>/group_matrix/gate4_{vireo,souporcell}/report/`.
+
+Acceptance criterion: two profiles reproduced over at least three subsets with
+genotype concordance >= 0.95 and ARI >= 0.90 on common high-confidence cells.
+**Neither backend meets it, so CW4 remains unresolved, as the criteria require.**
+
+### Souporcell: one profile in four of five subsets
+
+| Subset | Result | Discordant loci between profiles |
+|---|---|---:|
+| `all5` | one profile in every library (1-22 minority cells each) | 0 |
+| `trio_late`, `trio_mixed` | one profile | 0 |
+| `balanced2k` | one profile, every cell | - |
+| `trio_early` | ~50:50 in each library, 90.9% fitted ambient | 16,660 |
+
+Four subsets collapse to a single genotype, and the second cluster is a copy of
+the first. Fitted ambient of ~99.9% in those runs is the signature of that
+collapse, not a measurement. The fifth subset reproduces the per-library
+baseline's artificial split. Fixed-profile projection failed its contract again
+(profile concordance 0.0), so the CW5 finding that Souporcell cannot hold
+profiles fixed reproduces on the hard group.
+
+### Vireo: even splits that do not replicate
+
+Every Vireo subset splits every library roughly evenly, but:
+
+| Measure | CW4 | CW5 (real genotype) | D6 |
+|---|---|---|---|
+| High-confidence fraction, full group | **0.20** (7,294 / 36,800) | 0.92 | - |
+| Unassigned, full group | 0.67 | - | - |
+| Separating-locus replication (Jaccard) | **0.19-0.28** | 0.872 | 0.139 |
+| Cross-subset ARI | **0.008-0.124** | 1.000 | - |
+| Cross-subset cell agreement | 0.55-0.68 (chance ~0.5) | 1.000 | - |
+
+Genotype concordance across subsets is 0.988-0.990, above the 0.95 threshold,
+**and must not be read as a pass**. This is the same trap found on D6: when both
+profiles are near-copies of one dominant genotype, any pairing across runs looks
+concordant. The discriminating statistics -- locus replication, ARI and the
+confidence fraction -- all fail. Projection against `trio_early` profiles calls
+42% of cells doublets and assigns almost nothing in libraries 126 and 127.
+
+### What this does and does not show
+
+Two independent methods, across five discovery subsets, find no reproducible
+second genotype in CW4's evidence. That is a finding about what is *separable*
+from these allele matrices, not proof that CW4 contains no fetal cells: a low
+fetal fraction, high ambient contamination or insufficient per-cell coverage
+would produce the same result. The per-library baseline already showed
+HLA-G-positive cells distributed across both artificial clusters of
+Embryo-Imp15289125 (22.4% versus 18.9%), which is consistent with either reading.
+
+Consequences:
+
+- CW4 does not discriminate between the backends: both fail it, for their
+  different characteristic reasons.
+- The acceptance criterion needs amending: genotype concordance across runs
+  should not count toward Gate 4 on its own. Locus replication and the
+  high-confidence fraction should be required alongside it.
+- A composition QC gate now has three calibration points: CW5 accepts (Jaccard
+  0.87, 92% confident), and D6 and CW4 do not (Jaccard 0.14 and 0.19-0.28, CW4
+  20% confident). D6's own interpretation stays open until its composition is
+  confirmed.
+- The open scientific question is sensitivity: what fetal fraction and coverage
+  would be needed for a second genotype to become separable. A detection-limit
+  experiment is the way to answer it, since neither CW4 nor D6 can.
+
 ## Evidence and implementation notes
 
 - Souporcell performs remapping, variant calling, allele counting, clustering,
@@ -1086,6 +1158,11 @@ training support.
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
+- 2026-09-23: ran Gate 4 on CW4 in both backends. Neither reproduces two
+  profiles across subsets (Souporcell collapses to one profile in four of five;
+  Vireo's splits replicate at Jaccard 0.19-0.28 with ARI near zero), so CW4
+  remains unresolved. Souporcell's projection failure reproduced. Genotype
+  concordance passed spuriously and should not count toward Gate 4 alone.
 - 2026-09-23: ran the cross-arm head-to-head on CW5. The backends agree exactly
   (ARI 1.0000, genotype concordance 0.9854), so CW5 accuracy does not separate
   them and the choice rests on architecture.
