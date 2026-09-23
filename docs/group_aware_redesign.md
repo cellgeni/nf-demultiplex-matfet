@@ -1013,6 +1013,30 @@ Consequences for the design:
 - Vireo's Gate 3 pass stands, with the qualification that it holds only when the
   minority profile has adequate support.
 
+## Backend head-to-head on CW5: 2026-09-23
+
+The Gate 2 comparison neither arm runner could do, since neither can depend on
+the other's jobs. Souporcell joint seed 1 against Vireo joint seed 1, same
+matrices, same cells.
+
+| Measure | Value |
+|---|---|
+| Common high-confidence singlets | 17,209 |
+| Cell agreement / ARI | 1.0000 / 1.0000 |
+| Genotype concordance | 0.9854 over 239,228 loci |
+| Minority retention (Souporcell as reference) | 0.8727 (809 of 927) |
+| Doublet fraction | 0.0069 -> 0.0041 |
+
+**On CW5 the two backends give the same answer.** Of the 118 fetal cells they do
+not share, 112 are unassigned by Vireo rather than assigned differently, and six
+are called doublet. No cell is assigned to the opposite profile.
+
+This shapes how the backend gets chosen: accuracy on CW5 does not separate them,
+so the decision rests on the architectural differences already measured --
+Souporcell cannot hold profiles fixed and must re-infer jointly over the whole
+group, while Vireo projects well provided the minority profile has adequate
+training support.
+
 ## Evidence and implementation notes
 
 - Souporcell performs remapping, variant calling, allele counting, clustering,
@@ -1062,6 +1086,9 @@ Consequences for the design:
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
+- 2026-09-23: ran the cross-arm head-to-head on CW5. The backends agree exactly
+  (ARI 1.0000, genotype concordance 0.9854), so CW5 accuracy does not separate
+  them and the choice rests on architecture.
 - 2026-09-22: established that fixed-profile projection retains 99.6% of fetal
   cells when the profile is learned from the full population but only 31.8% at
   half strength, with the lost cells becoming doublets. Added a
