@@ -110,11 +110,25 @@ def count_informative_loci(group_dir: str) -> dict[str, int]:
 
 
 def write_locus_qc(group_dir: str, path: str) -> dict[str, int]:
+    """Write the per-cell locus cache atomically.
+
+    Several jobs can race to populate the same cache: both backend arms prepare
+    their discovery subsets concurrently against one group build. Writing to a
+    private temporary file and renaming means a loser of the race wastes some
+    compute but no reader ever sees a half-written file.
+    """
     counts = count_informative_loci(group_dir)
-    with open(path, "w") as out:
-        out.write("group_barcode\tn_informative_loci\n")
-        for barcode, count in counts.items():
-            out.write(f"{barcode}\t{count}\n")
+    temporary = f"{path}.tmp.{os.getpid()}"
+    try:
+        with open(temporary, "w") as out:
+            out.write("group_barcode\tn_informative_loci\n")
+            for barcode, count in counts.items():
+                out.write(f"{barcode}\t{count}\n")
+        os.replace(temporary, path)
+    except OSError:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+        raise
     return counts
 
 
