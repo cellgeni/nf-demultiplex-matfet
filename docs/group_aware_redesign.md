@@ -1109,6 +1109,37 @@ Consequences:
   would be needed for a second genotype to become separable. A detection-limit
   experiment is the way to answer it, since neither CW4 nor D6 can.
 
+## Detection-limit experiment: design, 2026-09-23
+
+Neither CW4 nor D6 can say whether "no reproducible second genotype" means no
+fetal cells or a fetal population below the detection floor. This experiment
+measures the floor directly, using only CW5 data both backends agree on.
+
+- **Truth** is consensus, not ground truth: a cell is fetal or maternal only
+  when Souporcell and Vireo joint CW5 runs both call it so at high confidence.
+  Pool: 809 fetal (804 from Embryo-Imp15350362, 5 from 363) and 16,400
+  maternal, with **zero** confident disagreements between the backends.
+- **Background**: 7,000 consensus-maternal cells drawn from all three CW5
+  libraries. Because the fetal cells come almost entirely from 362, drawing the
+  background from 362 as well stops library identity from predicting genotype.
+- **Spike**: consensus-fetal cells at 0, 0.5, 1, 2, 5 and 10% of the group (0 to
+  778 cells), two replicates each. Mother and fetus are genuinely related, which
+  is the realistic hard case. At 10% the replicates share 778 of 809 fetal cells,
+  so replicate variance there is understated.
+- **Per group**: Vireo discovery on the whole group and on two disjoint halves
+  (composition gate), and Souporcell discovery on the whole group; 60 jobs plus
+  a scoring job.
+- **Scored separately**: detection (recall and precision of the spiked cells,
+  and false positives in the 0% control) and the composition gate
+  (separating-locus replication between halves, confident-cell fraction). A
+  backend can detect the fetus while the gate rejects it, and the experiment is
+  built to show where that happens.
+
+Runner: `validation/group_matrix/lsf/run_spikein.sh` on the shared base, driving
+both adapters through their worktrees. It was dry-run end to end with a stub
+`bsub` before submission, and nested subsetting was verified exactly on D6.
+Output: `<ticket>/group_matrix/spikein/report/detection_curve.tsv`.
+
 ## Evidence and implementation notes
 
 - Souporcell performs remapping, variant calling, allele counting, clustering,
