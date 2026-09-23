@@ -55,28 +55,30 @@ contain only one detectable profile rather than forcing two clusters.
 
 ## Handoff: resume here
 
-Status on 2026-09-23. Gates 1-5 have run; the backend picture and the reasons
-behind it are in the result sections below. In one paragraph: on CW5 the two
-backends agree exactly; Souporcell cannot hold profiles fixed (Gate 3 failed on
-CW5 and again on CW4); Vireo projects well when the minority profile has enough
-training support but will split evidence that holds no reproducible second
-genotype, so it needs an external composition gate; CW4 remains unresolved in
-both backends. The leaning is **Vireo plus a mandatory composition gate**, not
-yet locked.
+Status on 2026-09-24. Gates 1-5 and the detection-limit experiment have run.
+On CW5 the backends agree exactly. Souporcell discovers a related fetal genotype
+down to 0.5% of cells but cannot hold profiles fixed. Vireo projects well when
+the minority profile has enough support but only discovers at >=5%. **Neither
+backend declines when there is nothing to find**, so a composition gate is
+mandatory whichever is chosen. CW4 remains unresolved; given Souporcell's
+sensitivity, any fetal population there is most likely below ~0.5%.
 
-**Running now:** the fetal-fraction detection-limit experiment (60 jobs plus a
-scoring job, submitted as `cellgeni-su` on 2026-09-23, job IDs 887252-887351).
-It decides whether CW4's result means "no fetal cells" or "below the detection
-floor", and it calibrates the composition gate. Output:
-`<ticket>/group_matrix/spikein/report/detection_curve.tsv`.
+The leaning has moved from "Vireo plus a gate" to the **hybrid: Souporcell
+discovery, Vireo fixed-profile projection (`--genoTag GT`), composition gate on
+both**. Not yet tested.
 
 Next, in order:
 
-1. Read the detection curve; set composition-gate thresholds from it.
-2. Resolve D6's true composition (see the premise note in the Gate 5 section).
-3. Amend the acceptance criteria: minority retention, and locus replication in
+1. Hybrid test on the spike-in groups: Souporcell discovery profiles projected
+   by Vireo with `--genoTag GT`, scored for recall and minority retention,
+   especially at 0.5-2% where Vireo cannot discover.
+2. Souporcell split-half gate at the same fractions, so the gate covers the
+   discovery stage the hybrid would use.
+3. Investigate Souporcell's 5% recall dip (fetal cells called doublets).
+4. Resolve D6's true composition (see the premise note in the Gate 5 section).
+5. Amend the acceptance criteria: minority retention, and locus replication in
    place of genotype concordance alone.
-4. Gate 6 (remapping A/B), then Gate 7 (scale), then the production branch.
+6. Gate 6 (remapping A/B), Gate 7 (scale), then the production branch.
 
 Runners, all resumable -- re-running submits only work whose output is missing:
 
@@ -1153,6 +1155,70 @@ both adapters through their worktrees. It was dry-run end to end with a stub
 `bsub` before submission, and nested subsetting was verified exactly on D6.
 Output: `<ticket>/group_matrix/spikein/report/detection_curve.tsv`.
 
+## Detection-limit result, 2026-09-24
+
+All 60 jobs completed; `<ticket>/group_matrix/spikein/report/detection_curve.tsv`.
+Recall and precision are of the spiked consensus-fetal cells, from K=2 discovery
+on the whole group. The gate is Vireo split-half locus replication (Jaccard).
+
+| Fetal fraction (cells) | Souporcell recall / precision | Vireo recall / precision | Vireo gate Jaccard |
+|---|---|---|---|
+| 0% (0) | false split ~50:50 | false split ~50:50 | 0.08-0.09 |
+| 0.5% (35) | **1.00 / 0.83-0.85** | 0.51-0.57 / 0.01 | 0.08 |
+| 1% (71) | 0.99 / 0.89-0.99 | 0.46-0.69 / 0.01-0.02 | 0.09 |
+| 2% (143) | 0.99-1.00 / 0.96-1.00 | 0.73-0.76 / 0.06 | 0.09-0.10 |
+| 5% (368) | 0.64-0.69 / 1.00 | **1.00 / 1.00** | 0.38-0.43 |
+| 10% (778) | 0.97 / 1.00 | 1.00 / 1.00 | **0.87** |
+
+### Findings
+
+1. **Souporcell is roughly ten times more sensitive in discovery.** It isolates
+   the fetal genotype from 35 cells in 7,000 (0.5%) as a profile of 41-42 cells.
+   Vireo's floor lies between 2% and 5%. Below it, Vireo still splits the
+   group, but along an arbitrary line: precision 0.01-0.06 means the fetal cells
+   are scattered across both halves, not found.
+2. **Neither backend declines when there is nothing to find.** In the 0%
+   control both split ~50:50, and both profiles draw evenly from all three
+   libraries, so the split is not a batch or ambient artefact but an arbitrary
+   halving of one genotype. This corrects the earlier reading of Souporcell's
+   D6 and CW4 behaviour as restraint: on a clean single-genotype background it
+   manufactures a split too. The composition gate is required for **both**
+   backends.
+3. **The Vireo gate tracks whether the found split is real.** Jaccard sits at
+   0.08-0.10 wherever Vireo's split is not the fetal genotype (0-2%), rises to
+   0.38-0.43 at 5%, and reaches 0.87 at 10%, matching CW5's 0.872. The gate's
+   discriminating power depends on how many minority cells each half holds
+   (~184 at 5%, ~389 at 10%), consistent with the retention finding.
+4. **A Souporcell anomaly at 5%.** Recall drops to 0.64-0.69 there, with the
+   lost fetal cells called doublets (110-129), while 2% and 10% are near
+   perfect. Unexplained; worth a targeted look before relying on Souporcell
+   around that fraction.
+
+### What this means for earlier results
+
+- **CW4.** Souporcell detects a related fetal genotype at 0.5% in CW5 data, yet
+  on CW4 it found no genotype difference at all (0 discordant loci between its
+  profiles, minority clusters of 1-22 cells). If CW4 carries fetal cells, they
+  are most likely below ~0.5% of cells or undetectable for reasons this
+  experiment does not model: a different pregnancy, coverage or ambient level.
+  The floor was measured on CW5 cells and may not transfer exactly.
+- **Gate thresholds.** For Vireo halves of ~3,500 cells, a Jaccard threshold
+  between 0.10 and 0.38 separates real from arbitrary splits. CW4's trio
+  replication (0.19-0.28) falls inside that gap, but it came from a different
+  design (overlapping trios of 14,000-25,000 cells), so it cannot be classified
+  with this calibration.
+- **Backend choice.** The picture is now split by stage: Souporcell is the
+  better discoverer and cannot project; Vireo projects well but discovers only
+  at >=5%. That points to the hybrid already named in this document: Souporcell
+  discovery feeding Vireo fixed-profile projection with `--genoTag GT`. It is
+  untested, and it is the next experiment.
+
+### Gaps
+
+- No Souporcell-side gate was run: split halves were Vireo only. A Souporcell
+  split-half at the same fractions is needed before a gate can cover the hybrid.
+- Two replicates per fraction; at 10% they share 778 of 809 fetal cells.
+
 ## Operational notes for running this harness on the farm
 
 Lessons that each cost a failed or misread run. They apply to any new runner.
@@ -1249,6 +1315,10 @@ Lessons that each cost a failed or misread run. They apply to any new runner.
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
+- 2026-09-24: detection-limit results. Souporcell discovers at 0.5%, Vireo only
+  at >=5%; both split a fetal-free control ~50:50 across all libraries, so the
+  gate is needed for both. Leaning moved to Souporcell discovery plus Vireo
+  projection.
 - 2026-09-23: designed and submitted the fetal-fraction detection-limit
   experiment; refreshed the handoff and recorded the farm operational lessons.
 - 2026-09-23: ran Gate 4 on CW4 in both backends. Neither reproduces two
