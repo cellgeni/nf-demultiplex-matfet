@@ -55,26 +55,39 @@ contain only one detectable profile rather than forcing two clusters.
 
 ## Handoff: resume here
 
-Gate 1 is complete for CW4, CW5 and D6, the pinned image's CLI is captured, and
-both backend adapters exist on their branches with self-tests passing. The
-public Nextflow workflow is still untouched, as intended.
+Status on 2026-09-23. Gates 1-5 have run; the backend picture and the reasons
+behind it are in the result sections below. In one paragraph: on CW5 the two
+backends agree exactly; Souporcell cannot hold profiles fixed (Gate 3 failed on
+CW5 and again on CW4); Vireo projects well when the minority profile has enough
+training support but will split evidence that holds no reproducible second
+genotype, so it needs an external composition gate; CW4 remains unresolved in
+both backends. The leaning is **Vireo plus a mandatory composition gate**, not
+yet locked.
 
-**The immediate task is to submit the Gate 2/3/5 DAGs**, one command per arm,
-from the corresponding worktree:
+**Running now:** the fetal-fraction detection-limit experiment (60 jobs plus a
+scoring job, submitted as `cellgeni-su` on 2026-09-23, job IDs 887252-887351).
+It decides whether CW4's result means "no fetal cells" or "below the detection
+floor", and it calibrates the composition gate. Output:
+`<ticket>/group_matrix/spikein/report/detection_curve.tsv`.
 
-```bash
-bash validation/group_matrix/lsf/run_gates_2_3_5.sh   # in each worktree
-```
+Next, in order:
 
-Each arm fans out roughly seven jobs plus a comparison job that runs on
-completion and writes JSON verdicts under
-`<ticket>/group_matrix/gate2_{vireo,souporcell}/comparisons/`. The two arms are
-independent and can run concurrently. Thresholds live in
-`common/compare_runs.py`; do not adjust one to make a run pass.
+1. Read the detection curve; set composition-gate thresholds from it.
+2. Resolve D6's true composition (see the premise note in the Gate 5 section).
+3. Amend the acceptance criteria: minority retention, and locus replication in
+   place of genotype concordance alone.
+4. Gate 6 (remapping A/B), then Gate 7 (scale), then the production branch.
 
-After that, in order: read the comparison verdicts against the stop conditions
-below, then Gate 4 (CW4 across discovery subsets) only if CW5 passes, then Gate
-6 (remapping A/B) only if Vireo remains promising, then Gate 7 (scale).
+Runners, all resumable -- re-running submits only work whose output is missing:
+
+| Experiment | Command |
+|---|---|
+| Gates 2, 3, 5 | `bash <worktree>/validation/group_matrix/lsf/run_gates_2_3_5.sh` |
+| Gate 4 | `bash <worktree>/validation/group_matrix/lsf/run_gate4_cw4.sh` |
+| Detection limit | `bash /nfs/cellgeni/batu/_repos/nf-demux-preg/validation/group_matrix/lsf/run_spikein.sh` |
+
+`<worktree>` is `/nfs/cellgeni/batu/_repos/worktrees/group-vireo` or
+`.../group-souporcell`.
 
 Current locations:
 
@@ -1140,6 +1153,53 @@ both adapters through their worktrees. It was dry-run end to end with a stub
 `bsub` before submission, and nested subsetting was verified exactly on D6.
 Output: `<ticket>/group_matrix/spikein/report/detection_curve.tsv`.
 
+## Operational notes for running this harness on the farm
+
+Lessons that each cost a failed or misread run. They apply to any new runner.
+
+**Submitting and watching**
+
+- Runs are submitted as `cellgeni-su`, a shared service account. `bjobs` as
+  another user shows nothing; use `bjobs -u cellgeni-su -w`.
+- `bjobs` occasionally returns empty output. A watcher must treat an empty reply
+  as unknown, and stop only when the `JOBID` header is printed with no matching
+  jobs, or on `No unfinished job found`.
+- `bhist -l` ends every unfinished job with a "Summary of time ... by <date>"
+  line stamped with the time of the query. It is not a termination record; the
+  job may still be running.
+- A running job's log is often silent for its whole runtime: the adapters print
+  nothing until the backend finishes. A stale log is not evidence of death.
+- `TERM_OWNER` with exit 130 is a `bkill` from the owning account (it sends
+  SIGINT first), not a resource or queue limit. Job 798449 (Vireo on full CW4)
+  was killed this way at 38 GB of 64 GB and 71 minutes in; who issued it could
+  not be recovered. On a shared account, tell co-users before long runs.
+- Resume on output, never on job IDs: a finished job leaves the queue, and a
+  dependency on it can become unsatisfiable. All runners now check for their
+  result files and submit only what is missing.
+
+**Writing runners**
+
+- `bash -n` parses but never executes, so it misses runtime word-expansion bugs.
+  Dry-run the submission path with a stub `bsub` that logs each job's
+  arguments and environment (`BSUB=<stub> bash run_*.sh`), as done for the
+  detection-limit runner.
+- `VAR=x "$@" bsub ...` does not work: bash parses assignments before expansion,
+  so an expanded `MODE=libraries` is treated as a command name. Use
+  `env VAR=x "$@" bsub ...`.
+- Pass a value that starts with `--` using `=`, as in
+  `--extra-args=--noDoublet`. Otherwise argparse reads it as a new flag.
+- Heavy data work (subsetting CW4 streams ~3.8 GB per matrix) goes in LSF jobs,
+  not on the submitting host.
+- Caches written by concurrent jobs must be written atomically (temporary file
+  plus rename); `loci_per_cell.tsv` is.
+
+**Permissions and paths**
+
+- Output directories are group-writable with ACLs; mixed `bc8` / `cellgeni-su`
+  ownership under the ticket is expected and harmless.
+- Container calls need `cellgen/singularity` and `-B /lustre,/nfs`; see the
+  verified environment facts under Gate 1.
+
 ## Evidence and implementation notes
 
 - Souporcell performs remapping, variant calling, allele counting, clustering,
@@ -1189,6 +1249,8 @@ Output: `<ticket>/group_matrix/spikein/report/detection_curve.tsv`.
 - 2026-09-19: ran Gate 1 on LSF for CW5, CW4 and D6. All three passed every
   integrity and determinism test; results and the captured pinned-image CLI are
   recorded in the Gate 1 section above.
+- 2026-09-23: designed and submitted the fetal-fraction detection-limit
+  experiment; refreshed the handoff and recorded the farm operational lessons.
 - 2026-09-23: ran Gate 4 on CW4 in both backends. Neither reproduces two
   profiles across subsets (Souporcell collapses to one profile in four of five;
   Vireo's splits replicate at Jaccard 0.19-0.28 with ARI near zero), so CW4
