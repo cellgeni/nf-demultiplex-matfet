@@ -1213,6 +1213,16 @@ on the whole group. The gate is Vireo split-half locus replication (Jaccard).
   discovery feeding Vireo fixed-profile projection with `--genoTag GT`. It is
   untested, and it is the next experiment.
 
+### Follow-up submitted, 2026-09-28
+
+`validation/group_matrix/lsf/run_spikein_followup.sh`, on the same 12 groups
+(40 jobs plus scoring): Vireo projection of each group against its Souporcell
+discovery profiles with `--genoTag GT` (the hybrid); Souporcell discovery on
+each half (the Souporcell-side gate); and Souporcell seeds 2 and 3 on the 5%
+groups, to test whether the recall dip is a local optimum. The Vireo adapter
+was changed to accept Souporcell's `0`/`1` profile names and its
+`cluster_to_profile` map, which the hybrid needs; this path has not run before.
+
 ### Gaps
 
 - No Souporcell-side gate was run: split halves were Vireo only. A Souporcell

@@ -125,6 +125,20 @@ def gate(base_dir: str, backend: str) -> dict:
     }
 
 
+# Every run scored per group: (label in the report, run directory, VCF layout,
+# which split-half gate applies). The hybrid is Souporcell discovery projected
+# by Vireo, so it is judged by the Souporcell gate -- the discovery stage it
+# would rely on. Runs whose directory does not exist are simply skipped, so this
+# scores the first experiment and the follow-up alike.
+RUNS = [
+    ("vireo", "vireo_full", "vireo", "vireo"),
+    ("souporcell", "souporcell_full", "souporcell", "souporcell"),
+    ("hybrid", "hybrid_full", None, "souporcell"),
+    ("souporcell_s2", "souporcell_full_s2", "souporcell", None),
+    ("souporcell_s3", "souporcell_full_s3", "souporcell", None),
+]
+
+
 def score(base: str) -> list[dict]:
     rows_out = []
     with open(os.path.join(base, "spikein_design.tsv"), newline="") as handle:
@@ -133,10 +147,12 @@ def score(base: str) -> list[dict]:
     for d in design:
         gdir = os.path.join(base, "groups", d["label"])
         truth = read_truth(os.path.join(gdir, "truth.tsv"))
-        for backend in ("vireo", "souporcell"):
-            run_dir = os.path.join(gdir, f"{backend}_full")
+        for label, run, layout, gate_backend in RUNS:
+            run_dir = os.path.join(gdir, run)
+            if not os.path.isdir(run_dir):
+                continue
             table = os.path.join(run_dir, "assignments.tsv")
-            entry = {"label": d["label"], "backend": backend,
+            entry = {"label": d["label"], "backend": label,
                      "fraction": float(d["fraction_target"]),
                      "replicate": int(d["replicate"])}
             if not os.path.isfile(table):
@@ -144,11 +160,12 @@ def score(base: str) -> list[dict]:
                 rows_out.append(entry)
                 continue
             entry["detection"] = detection(read_table(table), truth)
-            vcf = os.path.join(run_dir, PROFILE_VCF[backend])
-            if os.path.isfile(vcf):
-                entry["separating_loci"] = within_run_discordance(vcf).get(
-                    "min_discordant_loci_over_pairs")
-            entry["gate"] = gate(gdir, backend)
+            if layout:
+                vcf = os.path.join(run_dir, PROFILE_VCF[layout])
+                if os.path.isfile(vcf):
+                    entry["separating_loci"] = within_run_discordance(vcf).get(
+                        "min_discordant_loci_over_pairs")
+            entry["gate"] = gate(gdir, gate_backend) if gate_backend else {"evaluated": False}
             rows_out.append(entry)
     return rows_out
 
