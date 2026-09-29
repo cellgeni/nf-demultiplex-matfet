@@ -39,6 +39,8 @@ contain only one detectable profile rather than forcing two clusters.
 
 ## Current working decisions
 
+> **Superseded 2026-09-29.** Written before validation. The Souporcell-versus-Vireo question is settled (hybrid), and the five-library cap no longer applies to matrix construction. The decision and its evidence are in *Follow-up result: the hybrid works* below; the implementation brief is `docs/HANDOFF_hybrid_implementation.md`.
+
 - Add a biological `group_id` (pregnancy/donor group) to the input contract.
 - Keep `expected_genotypes` group-specific: normally 2, with later K=4 support
   for pools containing two maternal/fetal pairs.
@@ -123,6 +125,8 @@ Do not:
 
 ## Scaling to groups of 10-15 libraries
 
+> **Superseded 2026-09-29.** Its balanced-cell-cap option is risky: thinning the fetal-rich library's cells collapses fixed-profile retention (99.6% to 31.8%). Discovery must include that library in full. The decision and its evidence are in *Follow-up result: the hybrid works* below; the implementation brief is `docs/HANDOFF_hybrid_implementation.md`.
+
 Do not merge every BAM into one large Souporcell job. Remapping, variant
 calling, allele counting, temporary storage, and failure cost all grow with the
 combined reads and cells.
@@ -177,6 +181,8 @@ profile discovery, then project all cells. This must be benchmarked for runtime,
 memory, and genotype stability.
 
 ## Souporcell versus Vireo
+
+> **Superseded 2026-09-29.** This comparison predates any measurement. Measured: equal accuracy on CW5; Souporcell discovers to 0.5% but cannot project; Vireo projects but discovers only at >=5%. The decision and its evidence are in *Follow-up result: the hybrid works* below; the implementation brief is `docs/HANDOFF_hybrid_implementation.md`.
 
 The existing nf-demultiplex submodule and pinned container already contain both
 Vireo 0.5.8 and cellsnp-lite 1.2.3, so a Vireo experiment does not require
@@ -278,6 +284,8 @@ or pair; a generic `maternal_reference` label is not sufficient.
 
 ## Validation plan
 
+> **Superseded 2026-09-29.** The plan was run (Gates 1-5 plus the detection-limit experiments); Gates 6 and 7 are deferred. The description of D6 as a single-donor negative control was questioned by the user and is unresolved. The decision and its evidence are in *Follow-up result: the hybrid works* below; the implementation brief is `docs/HANDOFF_hybrid_implementation.md`.
+
 Validation set available under REQ-68805:
 
 - CW4: Embryo-Imp15289123 through Embryo-Imp15289127 (five libraries, including
@@ -329,6 +337,8 @@ Primary evaluation criteria:
 
 ## Parameters proposed for the redesign
 
+> **Superseded 2026-09-29.** `demux_backend` as a switch is no longer needed: the design fixes Souporcell discovery plus Vireo projection. The decision and its evidence are in *Follow-up result: the hybrid works* below; the implementation brief is `docs/HANDOFF_hybrid_implementation.md`.
+
 Names are provisional:
 
 - `group_id` and `sample_role` in the samplesheet.
@@ -342,6 +352,8 @@ Names are provisional:
 - fixed-profile assignment confidence and minimum informative-SNP thresholds.
 
 ## Open decisions
+
+> **Superseded 2026-09-29.** Most of these are now decided; the remaining open items are listed in the handoff brief. The decision and its evidence are in *Follow-up result: the hybrid works* below; the implementation brief is `docs/HANDOFF_hybrid_implementation.md`.
 
 - Replace Souporcell with Vireo, retain Souporcell, or use a remap + Vireo
   hybrid.
