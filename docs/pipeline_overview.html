@@ -1,0 +1,1110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mother or Fetus</title>
+<meta name="description" content="How nf-demultiplex-matfet separates maternal and fetal cells in pregnancy single-cell data, the evidence that it works, and how to use its outputs.">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10); --wash: rgba(11,11,11,0.035);
+  --s-real: #2a78d6; --s-fake: #eb6834; --s-weak: #1baf7a;
+  --g0: #cde2fb; --g1: #6da7ec; --g2: #1c5cab;
+  --good-text: #006300; --code: #f0efec; --accent: #2a78d6; --accent-wash: rgba(42,120,214,0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.04);
+    --s-real: #3987e5; --s-fake: #d95926; --s-weak: #199e70;
+    --g0: #184f95; --g1: #3987e5; --g2: #b7d3f6;
+    --good-text: #0ca30c; --code: #232321; --accent: #3987e5; --accent-wash: rgba(57,135,229,0.13);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.04);
+  --s-real: #3987e5; --s-fake: #d95926; --s-weak: #199e70;
+  --g0: #184f95; --g1: #3987e5; --g2: #b7d3f6;
+  --good-text: #0ca30c; --code: #232321; --accent: #3987e5; --accent-wash: rgba(57,135,229,0.13);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--page); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 17px; line-height: 1.6; }
+main { padding: 0 16px 80px; }
+.col { max-width: 720px; margin: 0 auto; }
+.wide { max-width: 980px; margin: 0 auto; }
+h1, h2, h3 { line-height: 1.2; font-weight: 650; }
+h1 { font-size: clamp(2.1rem, 6vw, 3.2rem); margin: 0 0 12px; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.4rem, 3.4vw, 1.8rem); margin: 0 0 10px; letter-spacing: -0.01em; }
+h3 { font-size: 1.1rem; margin: 26px 0 8px; }
+p { margin: 0 0 16px; }
+a { color: var(--accent); }
+.lede { font-size: 1.2rem; color: var(--ink-2); max-width: 680px; }
+.kicker { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+.meta { font-size: 0.86rem; color: var(--muted); margin-top: 18px; }
+header.hero { padding: 64px 16px 40px; }
+.glance { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin-top: 28px; }
+.glance h2 { font-size: 1.15rem; margin-bottom: 12px; }
+.glance dl { margin: 0; display: grid; grid-template-columns: 9.5rem 1fr; gap: 10px 18px; }
+.glance dt { font-weight: 650; color: var(--ink-2); font-size: 0.95rem; }
+.glance dd { margin: 0; font-size: 0.97rem; }
+@media (max-width: 560px) { .glance dl { grid-template-columns: 1fr; gap: 2px; } .glance dd { margin-bottom: 10px; } }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 20px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.tile .v { font-size: 1.9rem; font-weight: 650; line-height: 1.1; }
+.tile .l { font-size: 0.85rem; color: var(--ink-2); margin-top: 4px; }
+nav.toc { margin-top: 26px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+nav.toc .part { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+nav.toc .part b { display: block; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+nav.toc .part a { display: block; font-size: 0.92rem; text-decoration: none; padding: 1px 0; }
+nav.toc .part a:hover { text-decoration: underline; }
+.partbreak { max-width: 980px; margin: 72px auto 0; padding: 18px 0 0; border-top: 2px solid var(--ink); }
+.partbreak .pk { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; color: var(--muted); }
+.partbreak .pt { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; }
+.partbreak .pd { color: var(--ink-2); margin-top: 6px; max-width: 680px; }
+section { padding-top: 48px; }
+.num { font-size: 0.8rem; font-weight: 650; color: var(--muted); letter-spacing: 0.06em; }
+.inshort { background: var(--accent-wash); border-left: 3px solid var(--accent); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 4px 0 20px; font-size: 1rem; }
+.inshort b { color: var(--accent); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; display: block; margin-bottom: 2px; }
+figure { margin: 24px auto 28px; }
+.fig { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 18px 12px; }
+.fig-title { font-weight: 650; font-size: 1rem; margin-bottom: 2px; }
+.fig-sub { font-size: 0.88rem; color: var(--ink-2); margin-bottom: 10px; }
+figcaption { font-size: 0.88rem; color: var(--ink-2); margin-top: 10px; line-height: 1.5; }
+.chart { width: 100%; position: relative; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.85rem; color: var(--ink-2); margin: 4px 0 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.sw.hollow { background: transparent !important; border: 2px solid var(--muted); width: 11px; height: 11px; }
+.sw.line { width: 16px; height: 2px; border-radius: 1px; }
+details { margin: 10px 0 0; }
+details > summary { cursor: pointer; font-size: 0.88rem; color: var(--ink-2); font-weight: 600; padding: 4px 0; }
+details.tech { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; margin: 14px 0 18px; }
+details.tech[open] { padding-bottom: 14px; }
+details.tech > summary { color: var(--ink); }
+details.tech p, details.tech li { font-size: 0.93rem; }
+.table-wrap { overflow-x: auto; margin-top: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--ink-2); font-weight: 600; white-space: nowrap; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.86em; }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+pre { background: var(--code); padding: 12px 14px; border-radius: 8px; overflow-x: auto; line-height: 1.45; }
+pre code { background: none; padding: 0; }
+.callout { border-left: 3px solid var(--muted); background: var(--surface); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 20px 0; font-size: 0.95rem; }
+.callout strong:first-child { display: block; margin-bottom: 4px; }
+.term { border-bottom: 1.5px dotted var(--muted); cursor: help; }
+.term:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+#tip { position: fixed; z-index: 50; pointer-events: none; opacity: 0; transition: opacity .08s; background: var(--surface); color: var(--ink); border: 1px solid var(--border); box-shadow: 0 6px 24px rgba(0,0,0,0.18); border-radius: 8px; padding: 8px 11px; font-size: 0.84rem; line-height: 1.4; max-width: min(300px, calc(100vw - 24px)); }
+#tip.on { opacity: 1; }
+#tip .t-head { font-weight: 650; margin-bottom: 3px; }
+#tip .t-row { display: flex; align-items: center; gap: 8px; }
+#tip .t-row b { font-weight: 650; }
+#tip .t-row span.k { color: var(--ink-2); }
+#tip .key { width: 12px; height: 2px; border-radius: 1px; flex: none; }
+.flow { list-style: none; padding: 0; margin: 24px auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; counter-reset: step; }
+.flow li { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 14px 12px; counter-increment: step; }
+.flow li::before { content: counter(step); display: inline-flex; width: 24px; height: 24px; border-radius: 50%; align-items: center; justify-content: center; background: var(--accent); color: #fff; font-size: 0.8rem; font-weight: 700; margin-bottom: 8px; }
+.flow li.key { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.flow .scope { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.flow .name { font-weight: 650; font-size: 0.98rem; margin: 2px 0 4px; line-height: 1.25; }
+.flow .what { font-size: 0.85rem; color: var(--ink-2); line-height: 1.45; }
+.flow .see { font-size: 0.78rem; margin-top: 6px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 18px 0; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; font-size: 0.93rem; }
+.card h4 { margin: 0 0 6px; font-size: 1rem; }
+.card p { margin: 0 0 10px; }
+.card .tag { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.badge .ic { font-size: 0.85rem; line-height: 1; }
+.badge.good { color: var(--good-text); }
+.badge.neutral { color: var(--ink-2); }
+.badge.muted { color: var(--muted); font-weight: 500; }
+.changed { font-size: 0.75rem; color: var(--ink-2); font-weight: 500; }
+.ba td:first-child { font-weight: 600; }
+.split-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; gap: 2px; min-width: 120px; margin-top: 3px; }
+.split-bar i { display: block; height: 100%; }
+.small { font-size: 0.88rem; color: var(--ink-2); }
+ol.steps { padding-left: 22px; } ol.steps li { margin-bottom: 10px; }
+ul.tight { padding-left: 20px; } ul.tight li { margin-bottom: 8px; }
+dl.gloss { display: grid; grid-template-columns: 11rem 1fr; gap: 8px 16px; font-size: 0.93rem; }
+dl.gloss dt { font-weight: 650; }
+dl.gloss dd { margin: 0; color: var(--ink-2); }
+@media (max-width: 560px) { dl.gloss { grid-template-columns: 1fr; gap: 0; } dl.gloss dd { margin-bottom: 10px; } }
+.appendix details.tech > summary { font-size: 0.95rem; }
+footer { border-top: 1px solid var(--grid); margin-top: 64px; padding: 24px 16px; font-size: 0.85rem; color: var(--muted); }
+@media (max-width: 560px) { body { font-size: 16px; } header.hero { padding-top: 40px; } .fig { padding: 14px 10px 10px; } }
+@media print { .fig, .tile, .card, .flow li { break-inside: avoid; } details { display: block; } }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="col">
+    <div class="kicker">nf-demultiplex-matfet · overview for review</div>
+    <h1>Mother or fetus?</h1>
+    <p class="lede">A pregnancy tissue sample contains cells from two people. This pipeline works out, cell by cell, which come from the mother and which from the fetus, and says when the data are not good enough to tell.</p>
+
+    <div class="glance">
+      <h2>At a glance</h2>
+      <dl>
+        <dt>What it does</dt>
+        <dd>Labels every cell of a pregnancy single-cell RNA-seq library as maternal, fetal or unknown.</dd>
+        <dt>How</dt>
+        <dd>Pools all libraries from one pregnancy, finds the two people's
+          <span class="term" tabindex="0" data-def="The set of DNA variants a person carries. Mother and fetus differ because the fetus inherits half its DNA from the father.">genotypes</span>
+          from the DNA variants in the reads, checks that a second person is really there, and uses marker genes to decide which one is the fetus.</dd>
+        <dt>Does it work</dt>
+        <dd>On 57 test runs with a known answer, it made the right call every time (one very small fetus was reported as too small to use). On real data, its fetal fractions follow the tissue biology, which it never sees.</dd>
+        <dt>Result so far</dt>
+        <dd>REQ-68805, 27 pregnancies: a fetus identified in 19 (10 male with high confidence, 9 likely female, provisional); no second person in 7; one probable sample mix-up.</dd>
+        <dt>Main caveats</dt>
+        <dd>No independent ground truth yet; female-fetus calls are provisional; a second person is not always the fetus.</dd>
+      </dl>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <p class="meta">Pipeline 0.2.0-dev. Results from REQ-68805, run of 2–6 October 2026. Hover any dotted term for a definition, or see the <a href="#glossary">glossary</a>.</p>
+
+    <nav class="toc" aria-label="Contents">
+      <div class="part"><b>Part 1 · How it works</b>
+        <a href="#problem">1 The problem</a><a href="#approach">2 The approach</a><a href="#gate">3 Is there a second person?</a><a href="#orient">4 Which one is the fetus?</a></div>
+      <div class="part"><b>Part 2 · Does it work?</b>
+        <a href="#tests">5 Tests with a known answer</a><a href="#realdata">6 Real data: REQ-68805</a></div>
+      <div class="part"><b>Part 3 · Using the results</b>
+        <a href="#use">7 What you get</a><a href="#limits">8 Limits</a></div>
+      <div class="part"><b>Appendices</b>
+        <a href="#run">A Running it</a><a href="#files">B Every output file</a><a href="#glossary">C Glossary</a></div>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ================================================================== PART 1 -->
+<div class="partbreak"><div class="pk">Part 1</div><div class="pt">How it works</div>
+  <div class="pd">The problem with the first version, the approach that replaced it, and the two decisions at its centre.</div></div>
+
+<section id="problem">
+  <div class="col">
+    <div class="num">1</div>
+    <h2>The problem</h2>
+    <div class="inshort"><b>In short</b>Analysing each library on its own invents fetal cells: the genotyping tool always splits cells into two groups, even when only the mother is present.</div>
+    <p>Each cell's RNA reads carry its DNA variants at thousands of common
+      <span class="term" tabindex="0" data-def="A SNP (single-nucleotide polymorphism): a DNA position where people commonly differ.">SNPs</span>,
+      so cells can be grouped by the person they came from. The standard tool for this,
+      <span class="term" tabindex="0" data-def="A widely used tool that clusters single cells by genotype, without needing to know anyone's genotype in advance.">Souporcell</span>,
+      is told how many people to expect (two) and always returns that many groups. The first version of the pipeline ran it on each library separately. In a library with few or no fetal cells it simply cut the mother's cells in half, which looks just like a confident maternal/fetal split. On REQ-68805 that gave one usable library out of nine.</p>
+  </div>
+  <figure class="wide">
+    <div class="fig">
+      <div class="fig-title">Three libraries from one pregnancy (CW5), analysed alone and together</div>
+      <div class="fig-sub">Cells in each genotype group; fetal in blue, maternal in grey.</div>
+      <div class="table-wrap"><table class="ba" id="ba-table"></table></div>
+      <figcaption>Alone, libraries 363 and 364 are split into two near-equal halves of the mother. Pooled with 362, which holds 915 fetal cells, the real fetal genotype is found and 363 and 364 turn out to contain only 9 and 3 fetal cells.</figcaption>
+    </div>
+  </figure>
+</section>
+
+<section id="approach">
+  <div class="col">
+    <div class="num">2</div>
+    <h2>The approach</h2>
+    <div class="inshort"><b>In short</b>Pool every library from one pregnancy, find the two genotypes once, check that a second person is really there, then use marker genes to say which one is the fetus.</div>
+    <p>Libraries from the same pregnancy share the same mother and fetus. Pooling them into one
+      <span class="term" tabindex="0" data-def="All libraries from one pregnancy: one mother, one fetus. Set by the group_id column of the samplesheet.">pregnancy group</span>
+      means a fetus that is rare in most libraries but common in one is still found, and every library is then assigned against the same two genotypes. The pipeline has six steps; steps 4 and 5 are the two decisions explained next.</p>
+  </div>
+  <ol class="flow wide">
+    <li><div class="scope">each library</div><div class="name">Count alleles</div><div class="what">Re-align reads and record which version of each SNP every cell shows.</div></li>
+    <li><div class="scope">each pregnancy</div><div class="name">Pool libraries</div><div class="what">Merge all libraries' cells, remembering where each came from.</div></li>
+    <li><div class="scope">each pregnancy</div><div class="name">Find two genotypes</div><div class="what">Souporcell splits all cells into two groups and builds a genotype profile for each.</div></li>
+    <li class="key"><div class="scope">each pregnancy</div><div class="name">Is there a second person?</div><div class="what">Reject the split if the two groups are halves of one person.</div><div class="see"><a href="#gate">Section 3 →</a></div></li>
+    <li class="key"><div class="scope">each pregnancy</div><div class="name">Which one is the fetus?</div><div class="what">Marker genes decide; otherwise no label.</div><div class="see"><a href="#orient">Section 4 →</a></div></li>
+    <li><div class="scope">each pregnancy</div><div class="name">Split back and report</div><div class="what">A label for every cell of every library, and one report per pregnancy.</div></li>
+  </ol>
+  <div class="col">
+    <p>Two rules apply throughout. The pipeline never forces an answer: when it cannot tell, cells are labelled <code>unresolved</code>, never "maternal" by default. And genotype only says that two people are present; which one is the fetus always comes from gene expression.</p>
+    <details class="tech">
+      <summary>Technical detail: processes, tools and cost</summary>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Step</th><th>Process</th><th>What runs</th><th>Typical cost</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td><code>SOUPORCELL</code></td><td><code>souporcell_pipeline.py</code> with remapping (minimap2) and Vartrix allele counting; skipped when the samplesheet gives an existing <code>souporcell_dir</code>.</td><td>2.4–11.4 h (median 5.6 h), 13–16 GB per library</td></tr>
+          <tr><td>2</td><td><code>BUILD_GROUP_MATRIX</code></td><td><code>build_group_matrix.py</code>, then 19 pass/fail integrity checks (<code>check_group_matrix.py</code>).</td><td>1–17 min, under 2 GB</td></tr>
+          <tr><td>3</td><td><code>SOUPORCELL_DISCOVERY</code></td><td>Souporcell clustering (K = 2, seed 1, 4 threads), <code>troublet</code> (doublets), <code>consensus.py</code> (genotype profiles).</td><td>1–56 min; about 1.6 GB per 10 million matrix entries</td></tr>
+          <tr><td>4</td><td><code>COMPOSITION_GATE</code></td><td><code>composition_gate.py</code></td><td>seconds</td></tr>
+          <tr><td>5</td><td><code>MARKER_SUMMARY</code>, <code>LABEL_CLUSTERS</code></td><td>Marker expression pooled over the pregnancy's libraries; two-tier decision rule.</td><td>under 4 min</td></tr>
+          <tr><td>6</td><td><code>SPLIT_BY_LIBRARY</code>, <code>BUILD_REPORT</code></td><td>Per-library cell tables; per-pregnancy HTML report.</td><td>seconds</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small" style="margin-top:10px">All tools run from one pinned Singularity image. Resources for the pregnancy-level steps are sized for up to about 6 libraries per pregnancy.</p>
+    </details>
+  </div>
+</section>
+
+<section id="gate">
+  <div class="col">
+    <div class="num">3</div>
+    <h2>Is there a second person?</h2>
+    <div class="inshort"><b>In short</b>Compare the two groups' genotype profiles. A mother and fetus disagree at roughly half of the SNPs both can be read at; two halves of one person disagree far less. The cut-off is 0.40.</div>
+    <p>For each of its two groups, Souporcell writes a
+      <span class="term" tabindex="0" data-def="The genotype inferred for one group of cells: at each SNP, 0, 1 or 2 copies of the alternative version.">genotype profile</span>.
+      A mother and her fetus share one copy of every SNP, but the fetus's other copy comes from the father, so their profiles still differ at about half of the informative SNPs. Two halves of the same person should be identical, apart from errors where too few reads were available. The pipeline measures the <strong>discordant fraction</strong>: SNPs where the two profiles disagree, divided by SNPs called in both.</p>
+  </div>
+  <figure class="wide">
+    <div class="fig">
+      <div class="fig-title">Two groups' genotype profiles across 30 SNPs (illustration)</div>
+      <div class="legend" id="prof-legend"></div>
+      <div class="chart" id="fig-profiles"></div>
+      <figcaption>Left: mother and fetus disagree at many SNPs. Right: two halves of one person disagree only at a few noisy ones. In real data, halves of one person disagreed at 0.17–0.36 of SNPs and mother–fetus pairs at 0.44–0.72.</figcaption>
+    </div>
+  </figure>
+  <div class="col">
+    <p>The result is one of three verdicts for the pregnancy:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Verdict</th><th>When</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge good"><span class="ic">✓</span>two_profiles</span></td><td>Discordant fraction ≥ 0.40 and the smaller group has ≥ 20 <span class="term" tabindex="0" data-def="A droplet containing exactly one cell. Doublets (two cells in one droplet) are excluded from the decision.">singlets</span></td><td>Two people. Go on to decide which is the fetus.</td></tr>
+        <tr><td><span class="badge neutral"><span class="ic">–</span>unresolved</span></td><td>Discordant fraction below 0.40, or no SNP readable in both profiles</td><td>One person. No cell is labelled maternal or fetal.</td></tr>
+        <tr><td><span class="badge neutral"><span class="ic">◐</span>one_profile</span></td><td>Profiles differ, but the smaller group has under 20 singlets</td><td>Possibly a second person, too few cells to use. No labels.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small" style="margin-top:12px">How the 0.40 cut-off was chosen, and how well it separates real from fake splits, is shown in <a href="#tests">section 5</a>.</p>
+  </div>
+</section>
+
+<section id="orient">
+  <div class="col">
+    <div class="num">4</div>
+    <h2>Which one is the fetus?</h2>
+    <div class="inshort"><b>In short</b>If one group expresses the Y-chromosome gene RPS4Y1, it is a male fetus (high confidence). Otherwise placental marker genes vote (provisional, likely female). If neither decides, no label is given.</div>
+    <p>Marker expression is pooled over all of the pregnancy's libraries and compared between the two groups.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Step</th><th>Rule</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>Tier 1</td><td><strong>RPS4Y1</strong> in at least 10% of one group's cells and 5 times more than in the other. A mother has no Y chromosome, so this can only be a male fetus.</td><td>Fetal, male, <em>high</em> confidence; the other group maternal.</td></tr>
+        <tr><td>Tier 2</td><td>Placental <span class="term" tabindex="0" data-def="Fetal cells of the placenta; some invade the mother's tissue. They carry the fetal genotype.">trophoblast</span> markers (HLA-G, XAGE2, XAGE3, HAPLN1, PITX2, HPGDS, GAPLINC) vote for the group where they are enriched; a clear majority decides.</td><td>Fetal, likely female, <em>provisional</em>; the other group maternal.</td></tr>
+        <tr><td>Otherwise</td><td>Neither tier decides.</td><td>Both groups <code>unresolved</code>.</td></tr>
+      </tbody>
+    </table></div>
+    <p style="margin-top:14px">The absence of RPS4Y1 is never taken as evidence that a group is maternal: the fetus may be female. Tier 2 calls are consistent so far but have not been independently validated, which is why they are provisional. Placental markers are only expressed by trophoblast, so a female fetus in tissue without trophoblast stays unresolved.</p>
+    <details class="tech">
+      <summary>Technical detail: thresholds</summary>
+      <p>Defaults in <code>nextflow.config</code>: <code>rps4y1_fraction_floor = 0.10</code>, <code>rps4y1_min_fold = 5</code>, <code>min_vote_margin = 2</code>, <code>min_marker_detected_fraction = 0.10</code>, <code>min_marker_fraction_delta = 0.05</code>, <code>min_marker_logfc = 1.0</code>, <code>min_cluster_cells = 50</code> (a group under 50 singlets downgrades a high-confidence call to provisional). Only singlets count; doublets and unassigned cells are never labelled.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ================================================================== PART 2 -->
+<div class="partbreak"><div class="pk">Part 2</div><div class="pt">Does it work?</div>
+  <div class="pd">First on data where the answer is known, then on real pregnancies, where the biology provides an independent check.</div></div>
+
+<section id="tests">
+  <div class="col">
+    <div class="num">5</div>
+    <h2>Tests with a known answer</h2>
+    <div class="inshort"><b>In short</b>On 57 test runs with a known answer, every fake split fell below 0.40 and every real fetus above it. Fetal cells are found down to about 1% of cells, and below that the pipeline reports "too small" rather than guessing.</div>
+    <h3>The spike-in experiment</h3>
+    <p>Real data never tells us the answer, so the method was first tested on data where we know it. Each
+      <span class="term" tabindex="0" data-def="A synthetic test sample built by mixing a known number of cells of known origin into a background of other cells.">spike-in</span>
+      test mixes about 7,000 maternal cells of known origin (from CW5) with a chosen number of known fetal cells, from none up to 10%, twice per level.</p>
+  </div>
+  <figure class="wide">
+    <div class="fig">
+      <div class="fig-title">How many known fetal cells are found, by fetal fraction</div>
+      <div class="fig-sub">Recall: share of the fetal cells found. Precision: share of fetal calls that really are fetal. Two replicates per level; the row under the axis shows the gate's verdict.</div>
+      <div class="legend" id="spike-legend"></div>
+      <div class="chart" id="fig-spike"></div>
+      <figcaption>From 1% fetal cells upwards, nearly all fetal cells are found with few false calls. At 0.5% (35 cells) they are still found, with some maternal cells mixed in. With no fetal cells the gate rejects the split, as it should. The dip at 5% is reproducible and unexplained; the missed fetal cells are called doublets, not maternal.</figcaption>
+      <details><summary>Data table</summary><div class="table-wrap" id="tbl-spike"></div></details>
+    </div>
+  </figure>
+  <div class="col">
+    <h3>Does the gate separate real from fake?</h3>
+    <p>Below, every run with a known or checkable answer: the spike-ins, earlier test runs on CW4 and CW5, and the real REQ-68805 pregnancies (section 6).</p>
+  </div>
+  <figure class="wide">
+    <div class="fig">
+      <div class="fig-title">Discordant fraction of every run with a known or checkable answer</div>
+      <div class="fig-sub">Each dot is one run. The shaded side of the 0.40 line is rejected.</div>
+      <div class="legend" id="gate-legend"></div>
+      <div class="chart" id="fig-gate"></div>
+      <figcaption>Fake splits (halves of one person) all fall below 0.40 and real mother–fetus splits all above. Six runs, all from pregnancy CW4, collapsed completely to one genotype and are rejected without a fraction, so they have no dot. D6 and D7 are discussed in section 6.</figcaption>
+      <details><summary>Data table</summary><div class="table-wrap" id="tbl-gate"></div></details>
+    </div>
+  </figure>
+  <div class="col">
+    <div class="fig" style="padding-top:12px"><div class="fig-title">Verdict by known answer</div><div class="table-wrap" id="tbl-perf"></div></div>
+    <p style="margin-top:18px">How close the nearest cases came to the 0.40 line:</p>
+    <div class="tiles" id="perf-tiles"></div>
+    <h3>What to expect on new data</h3>
+    <ul class="tight">
+      <li><strong>Clear cases</strong> read below about 0.35 or above about 0.45. Between those, check the marker evidence and how the two genotypes are spread over libraries before relying on the call: on real data the margin either side of 0.40 was only 0.04.</li>
+      <li><strong>Detection limit</strong>: about 35–70 fetal cells in a 7,000-cell pregnancy (0.5–1%). With 17 fetal cells the result was <code>one_profile</code>, "too small", not a wrong call.</li>
+      <li><strong>Cell-level accuracy</strong> once a fetus is accepted: from 1% upwards, 97–100% of fetal cells found and 89–100% of fetal calls correct.</li>
+    </ul>
+    <details class="tech">
+      <summary>How the gate was designed</summary>
+      <ol class="steps">
+        <li><strong>Requirement.</strong> Reject two halves of one person, using only Souporcell's own outputs.</li>
+        <li><strong>Candidates</strong>, each measured on the same test runs:
+          <div class="table-wrap"><table>
+            <thead><tr><th>Signal</th><th>Result</th><th>Kept?</th></tr></thead>
+            <tbody>
+              <tr><td>Split-half replication of separating SNPs</td><td>0.75–0.93 at every fetal fraction, including none</td><td>No</td></tr>
+              <tr><td>Number of separating SNPs</td><td>Grows with depth: a fake CW4 split had as many as a real 1% fetus</td><td>No</td></tr>
+              <tr><td>Ambient RNA fitted by Souporcell</td><td>Perfect on the test runs; failed on real data (below)</td><td>Replaced</td></tr>
+              <tr><td><strong>Discordant fraction</strong></td><td>Separated every run</td><td><strong>Yes</strong></td></tr>
+            </tbody>
+          </table></div></li>
+        <li><strong>Cut-off.</strong> 0.40 lies in the gap between the highest fake (0.30) and lowest real (0.53) test run, chosen from test runs only.</li>
+        <li><strong>Check, not tune.</strong> Real pregnancies were then used to check the cut-off, never to move it.</li>
+        <li><strong>Minimum size.</strong> At least 20 singlets in the smaller group: a profile built from very few cells makes real fetal cells look like doublets.</li>
+      </ol>
+    </details>
+    <h3>Why not ambient RNA?</h3>
+    <p>The first version of the gate used Souporcell's estimate of
+      <span class="term" tabindex="0" data-def="Free-floating RNA in the sample that ends up in droplets alongside a cell's own RNA.">ambient RNA</span>,
+      which reads very high when the two groups are one person. It separated the test runs perfectly, all from one tissue and chemistry, but not real data from other tissues and chemistries.</p>
+  </div>
+  <figure class="wide">
+    <div class="fig">
+      <div class="fig-title">Ambient RNA did not separate real from fake splits on real data; the discordant fraction did</div>
+      <div class="fig-sub">Same runs as above. Shaded band: where the old ambient-RNA gate reported "unresolved".</div>
+      <div class="legend" id="amb-legend"></div>
+      <div class="chart" id="fig-ambient"></div>
+      <figcaption>Real fetuses (blue) range from 1% to 72% ambient RNA, so no ambient cut-off works. CW15 and Hrv43, both male fetuses, were withheld by the old gate; D7 was accepted. Ambient RNA is still reported, as a quality metric only.</figcaption>
+    </div>
+  </figure>
+</section>
+
+<section id="realdata">
+  <div class="col">
+    <div class="num">6</div>
+    <h2>Real data: REQ-68805</h2>
+    <div class="inshort"><b>In short</b>Across 27 real pregnancies, the fetal share of each library follows its tissue: high in placenta, low in decidua, near zero in blood. The pipeline never sees the tissue, so this is an independent check.</div>
+    <p id="res-summary"></p>
+  </div>
+  <figure class="wide">
+    <div class="fig">
+      <div class="fig-title">Share of each library's cells called fetal, by tissue and sort</div>
+      <div class="fig-sub">One dot per library. Hollow: the pregnancy was not labelled, so no fetal share was measured.</div>
+      <div class="legend" id="tis-legend"></div>
+      <div class="chart" id="fig-tissue"></div>
+      <figcaption>Placenta sorted for trophoblast (Vento-Tormo 2018) is 61–98% fetal. Unsorted placenta (Arutyunyan 2023) ranges from 3% to 95%, depending on how much maternal tissue was attached; in every case the fetal group is the one expressing placental markers. Decidua is mostly under 20% fetal, blood near 0%, and in fallopian tube the fetal cells sit in libraries sorted for the trophoblast marker HLA-G. Tissue and sort come from the metadata table.</figcaption>
+      <details><summary>Data table</summary><div class="table-wrap" id="tbl-tissue"></div></details>
+    </div>
+  </figure>
+  <div class="col"><h3>Five examples</h3></div>
+  <div class="cards wide">
+    <div class="card">
+      <div class="tag">Fallopian tube · 3 libraries</div>
+      <h4>CW5: a female fetus found from one library</h4>
+      <p>915 fetal cells in the library sorted for HLA-G; 9 and 3 in the other two. No Y signal, five placental markers: provisional, likely female. Identical to the trusted earlier result for that library.</p>
+      <span class="badge good"><span class="ic">✓</span>two_profiles · 0.53</span>
+    </div>
+    <div class="card">
+      <div class="tag">Fallopian tube · 1 library</div>
+      <h4>CW15: a male fetus the old gate missed</h4>
+      <p>A 313-cell group expressing RPS4Y1 in 20% of cells, against 0% in the other. Rejected by the old ambient-RNA gate; accepted now, male, high confidence.</p>
+      <span class="badge good"><span class="ic">✓</span>two_profiles · 0.69</span> <span class="changed">↺ changed by new gate</span>
+    </div>
+    <div class="card">
+      <div class="tag">Placenta · 2 libraries</div>
+      <h4>D11: the fetus is the majority</h4>
+      <p>4,514 fetal against 200 maternal cells, as expected in placenta; over 70% of the fetal group expresses trophoblast markers.</p>
+      <span class="badge good"><span class="ic">✓</span>two_profiles · 0.50</span>
+    </div>
+    <div class="card">
+      <div class="tag">Fallopian tube · 1 library</div>
+      <h4>CW9: a fake split, rejected</h4>
+      <p>Split 5,990 / 5,338, no fetal marker in either group, profiles disagree at only 0.34. Two halves of the mother; nothing is labelled.</p>
+      <span class="badge neutral"><span class="ic">–</span>unresolved · 0.34</span>
+    </div>
+    <div class="card">
+      <div class="tag">Decidua and blood · Vento-Tormo 2018</div>
+      <h4>D6 and D7: probably a sample mix-up</h4>
+      <p>The two genotypes separate by library, not within tissue, and D6's blood library matches D7's decidua genotype. This points to a library filed under the wrong donor. No fetal labels were written.</p>
+      <span class="badge neutral"><span class="ic">?</span>metadata check needed</span>
+    </div>
+  </div>
+  <div class="col">
+    <details class="tech">
+      <summary>All 27 pregnancies</summary>
+      <p class="small">↺ marks the three pregnancies whose verdict changed when the discordant-fraction gate replaced the ambient-RNA gate.</p>
+      <div class="table-wrap" id="tbl-groups"></div>
+    </details>
+  </div>
+</section>
+
+<!-- ================================================================== PART 3 -->
+<div class="partbreak"><div class="pk">Part 3</div><div class="pt">Using the results</div>
+  <div class="pd">What a user gets, how to read it, and where the pipeline's answers stop.</div></div>
+
+<section id="use">
+  <div class="col">
+    <div class="num">7</div>
+    <h2>What you get</h2>
+    <div class="inshort"><b>In short</b>One table per library with a label for every cell, and one report per pregnancy saying how far to trust it. Read the report first, then take the cells.</div>
+    <p><strong><code>reports/&lt;pregnancy&gt;.html</code></strong> gives the verdict, which group is fetal and why, any warnings, and cells per library. <strong><code>&lt;library&gt;/cell_assignments.tsv.gz</code></strong> has one row per CellRanger cell barcode, so it joins directly onto that library's AnnData or Seurat object. Its <code>label</code> column is the answer:</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Label</th><th>Meaning</th><th>Use as</th></tr></thead>
+      <tbody>
+        <tr><td><code>fetal_high_confidence_male</code></td><td>Fetal; fetus identified by the Y chromosome</td><td>Fetal. The strongest call.</td></tr>
+        <tr><td><code>fetal_marker_supported</code></td><td>Fetal; identified by placental markers, likely female</td><td>Fetal, provisional.</td></tr>
+        <tr><td><code>maternal_likely</code></td><td>The other person, once the fetus is identified</td><td>Maternal.</td></tr>
+        <tr><td><code>unresolved</code></td><td>The pregnancy could not be labelled</td><td>Unknown. <strong>Not</strong> maternal.</td></tr>
+        <tr><td><code>doublet</code></td><td>Two cells in one droplet</td><td>Exclude.</td></tr>
+        <tr><td><code>unassigned</code></td><td>Too few informative reads</td><td>Exclude.</td></tr>
+      </tbody>
+    </table></div>
+    <p style="margin-top:14px">A library can have no fetal cells even when its pregnancy has a fetus: the fetal cells may all be in another library of the pregnancy. All other output files are evidence and audit trail; they are listed in <a href="#files">appendix B</a>.</p>
+  </div>
+</section>
+
+<section id="limits">
+  <div class="col">
+    <div class="num">8</div>
+    <h2>Limits</h2>
+    <div class="inshort"><b>In short</b>Validated on synthetic tests from one pregnancy and checked against biology, not against independently genotyped mothers and fetuses.</div>
+    <ul class="tight">
+      <li><strong>A second person is not always the fetus.</strong> The gate asks whether two people are present. A library from another donor would pass like a fetus (D6). Checking the per-library pattern against the tissue helps catch this.</li>
+      <li><strong>No independent ground truth.</strong> The strongest available test would be genotyping mother and fetus directly, or published per-cell annotations.</li>
+      <li><strong>Female fetuses</strong> depend on placental markers; in tissue without trophoblast they stay unresolved.</li>
+      <li><strong>Very small fetal fractions</strong>, below about 0.5% of a 7,000-cell pregnancy, are not detected.</li>
+      <li><strong>Large pregnancies</strong> (tens of libraries) have not been run; computing resources are not yet sized for them.</li>
+      <li><strong>The reverse question</strong>, finding rare maternal cells in fetal tissue, needs a different method; this pipeline is designed to find fetal cells in maternal tissue.</li>
+      <li><strong>Not supported yet:</strong> maternal reference samples, and pools of more than one pregnancy.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================================================================== APPENDICES -->
+<div class="partbreak"><div class="pk">Appendices</div><div class="pt">Reference</div>
+  <div class="pd">For running the pipeline and working with its files.</div></div>
+
+<section id="run" class="appendix">
+  <div class="col">
+    <div class="num">A</div>
+    <h2>Running it</h2>
+    <p>One CSV row per library; libraries sharing a <code>group_id</code> are treated as one pregnancy.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Column</th><th>Required</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>group_id</code></td><td>yes</td><td>Pregnancy (one mother, one fetus). A pregnancy with one library is allowed.</td></tr>
+        <tr><td><code>sample_id</code></td><td>yes</td><td>Unique library name (letters, digits, <code>.</code>, <code>_</code>, <code>-</code>).</td></tr>
+        <tr><td><code>bam</code></td><td>yes</td><td>CellRanger BAM.</td></tr>
+        <tr><td><code>barcodes</code></td><td>yes</td><td>Filtered cell barcodes.</td></tr>
+        <tr><td><code>expression</code></td><td>yes</td><td>CellRanger <code>filtered_feature_bc_matrix</code> directory.</td></tr>
+        <tr><td><code>souporcell_dir</code></td><td>no</td><td>Existing allele counts for this library; skips the slow step 1.</td></tr>
+      </tbody>
+    </table></div>
+<pre><code>module load cellgen/nextflow
+nextflow run nf-demultiplex-matfet/main.nf \
+    --input samplesheet.csv \
+    --outdir results \
+    -profile sanger \
+    -resume</code></pre>
+    <p class="small">All rows are checked before any job starts. Step 1 takes 2.4–11.4 hours per library (median 5.6), five at a time; the pregnancy-level steps follow within minutes to an hour. <code>-resume</code> reuses finished work.</p>
+  </div>
+</section>
+
+<section id="files" class="appendix">
+  <div class="col">
+    <div class="num">B</div>
+    <h2>Every output file</h2>
+<pre><code>results/
+├── &lt;library&gt;/             cell_assignments.tsv.gz, library_summary.tsv
+├── reports/&lt;pregnancy&gt;.html
+├── groups/&lt;pregnancy&gt;/     evidence: gate, labels, markers, discovery/, matrix/
+├── souporcell/&lt;library&gt;/  step 1 allele counts (intermediate)
+└── pipeline_info/         run records</code></pre>
+
+    <details class="tech">
+      <summary><code>&lt;library&gt;/cell_assignments.tsv.gz</code>: one row per cell</summary>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>group_id</code>, <code>sample_id</code>, <code>barcode</code></td><td>Pregnancy, library, CellRanger barcode (e.g. <code>AAACCAAAGAAGGAAG-1</code>).</td></tr>
+          <tr><td><code>souporcell_status</code></td><td><code>singlet</code>, <code>doublet</code> or <code>unassigned</code>.</td></tr>
+          <tr><td><code>souporcell_cluster</code></td><td>Genotype group, <code>0</code> or <code>1</code> (arbitrary within a pregnancy). Doublets show <code>0/1</code> or <code>1/0</code>; unassigned cells show an unreliable best guess.</td></tr>
+          <tr><td><code>label</code>, <code>confidence</code></td><td>See section 7; confidence is <code>high</code>, <code>provisional</code>, <code>unresolved</code> or <code>NA</code>.</td></tr>
+          <tr><td><code>reason</code></td><td>Plain-text explanation.</td></tr>
+        </tbody>
+      </table></div>
+<pre><code>zcat Embryo-Imp15350362/cell_assignments.tsv.gz | awk -F'\t' 'NR==1 || $6 ~ /^fetal_/'   # fetal cells</code></pre>
+    </details>
+
+    <details class="tech">
+      <summary><code>&lt;library&gt;/library_summary.tsv</code>: counts for one library</summary>
+      <p>The pregnancy's <code>gate_verdict</code>, <code>n_cells</code>, <code>n_singlet</code>, <code>n_doublet</code>, <code>n_unassigned</code>, and the number of cells with each label (<code>label_fetal_high_confidence_male</code> … <code>label_unassigned</code>).</p>
+    </details>
+
+    <details class="tech">
+      <summary><code>groups/&lt;pregnancy&gt;/gate.tsv</code> and <code>gate_libraries.tsv</code>: is there a second person?</summary>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>verdict</code>, <code>reason</code></td><td><code>two_profiles</code>, <code>one_profile</code> or <code>unresolved</code>, and why.</td></tr>
+          <tr><td><code>discordant_fraction</code></td><td><code>separating_loci</code> ÷ <code>loci_called_in_both</code>; <code>NA</code> when collapsed to one genotype.</td></tr>
+          <tr><td><code>cluster_singlets</code>, <code>minority_cluster</code>, <code>minority_singlets</code></td><td>Singlets per group (e.g. <code>0:927;1:16564</code>) and the smaller group, which needs at least 20.</td></tr>
+          <tr><td><code>n_cells</code>, <code>n_singlet</code>, <code>n_doublet</code>, <code>n_unassigned</code>, <code>doublet_fraction</code></td><td>Cell counts for the pregnancy.</td></tr>
+          <tr><td><code>ambient_rna_pct</code>, <code>missing_gt_fraction</code></td><td>Quality metrics only, not used to decide.</td></tr>
+          <tr><td><code>min_discordant_fraction</code>, <code>min_minority_singlets</code></td><td>Thresholds used (0.40, 20).</td></tr>
+        </tbody>
+      </table></div>
+      <p><code>gate_libraries.tsv</code>: cells and singlets per genotype group for each library, written for every pregnancy, including unresolved ones.</p>
+    </details>
+
+    <details class="tech">
+      <summary><code>groups/&lt;pregnancy&gt;/cluster_labels.tsv</code> and <code>group_qc_summary.tsv</code>: which group is fetal?</summary>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Column</th><th>Values</th></tr></thead>
+        <tbody>
+          <tr><td><code>label</code>, <code>confidence</code></td><td>Per genotype group, as in the cell table.</td></tr>
+          <tr><td><code>inferred_sex</code></td><td><code>male</code> or <code>likely_female</code> (fetal group), <code>NA</code> (maternal group), <code>undetermined</code>.</td></tr>
+          <tr><td><code>rule</code></td><td><code>tier1_rps4y1_override</code>, <code>tier2_secondary_marker_vote</code>, <code>composition_gate</code> (withheld by the gate) or <code>no_rule_fired</code> (two people, no marker decided).</td></tr>
+          <tr><td><code>supporting_markers</code>, <code>reason</code>, <code>warnings</code></td><td>Evidence and caveats.</td></tr>
+          <tr><td><code>verdict</code> (summary file)</td><td>Which tier decided: <code>rps4y1</code>, <code>markers</code> or <code>unresolved</code>; also <code>fetal_cluster</code>, <code>maternal_cluster</code>, <code>cluster_imbalance_ratio</code>.</td></tr>
+        </tbody>
+      </table></div>
+      <div class="table-wrap" style="margin-top:10px"><table>
+        <thead><tr><th>Warning</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td>Cluster sizes are highly imbalanced</td><td>One group more than 10 times the other. Expected when few fetal cells were captured; usually harmless after the gate.</td></tr>
+          <tr><td>Cluster(s) have &lt; 50 singlet cells</td><td>Confidence downgraded to provisional.</td></tr>
+          <tr><td>RPS4Y1 detected in both clusters</td><td>Possible ambient RNA or mixing.</td></tr>
+          <tr><td>Fewer / more than two singlet clusters</td><td>Two-person assumption failed; nothing labelled.</td></tr>
+        </tbody>
+      </table></div>
+    </details>
+
+    <details class="tech">
+      <summary><code>groups/&lt;pregnancy&gt;/cluster_marker_summary.tsv</code> and <code>gene_resolution.tsv</code>: marker evidence</summary>
+      <p>Per genotype group and marker, pooled over the pregnancy's libraries, singlets only: <code>n_cluster_cells</code>, <code>n_pos</code> and <code>frac_pos</code> (cells expressing it), <code>cp10k</code> (expression per 10,000 counts) and <code>mean_counts</code>. <code>gene_resolution.tsv</code> records how each marker gene was found in the expression matrix; the run stops if one is missing.</p>
+    </details>
+
+    <details class="tech">
+      <summary><code>groups/&lt;pregnancy&gt;/discovery/</code>: Souporcell's genotype groups</summary>
+      <p><code>clusters.tsv</code>: Souporcell's call for every cell (barcodes written <code>&lt;library&gt;::&lt;barcode&gt;</code>), with probabilities; all labels are built from it. <code>cluster_genotypes.vcf</code>: the two genotype profiles compared by the gate (samples <code>0</code> and <code>1</code>; <code>GT</code> is the call, <code>./.</code> none, <code>AO</code>/<code>RO</code> supporting reads). <code>ambient_rna.txt</code>: quality metric. <code>clusters_tmp.tsv</code> and <code>*.err</code>: intermediate output and logs.</p>
+    </details>
+
+    <details class="tech">
+      <summary><code>groups/&lt;pregnancy&gt;/matrix/</code>: audit trail of the pooling</summary>
+      <p><code>barcode_provenance.tsv</code> maps every pooled barcode to its library and CellRanger barcode; <code>library_offsets.tsv</code> and <code>matrix_qc.tsv</code> give each library's place and size in the pooled matrix; <code>integrity_check.txt</code> lists the 19 checks that pooling lost nothing (any failure stops the run); <code>manifest.json</code> records inputs and parameters.</p>
+    </details>
+
+    <details class="tech">
+      <summary><code>souporcell/&lt;library&gt;/</code> and <code>pipeline_info/</code></summary>
+      <p><code>souporcell/</code> holds step 1's allele counts (reusable via <code>souporcell_dir</code>), the re-aligned reads (about 10 GB per library), and Souporcell's own per-library analysis. That per-library analysis is exactly what produced fake splits (section 1): <strong>do not use it as a result</strong>. <code>pipeline_info/</code> has Nextflow's report, timeline, task table and workflow graph.</p>
+    </details>
+  </div>
+</section>
+
+<section id="glossary" class="appendix">
+  <div class="col">
+    <div class="num">C</div>
+    <h2>Glossary</h2>
+    <dl class="gloss">
+      <dt>Allele</dt><dd>One version of a DNA position; everyone carries two, one from each parent.</dd>
+      <dt>Ambient RNA</dt><dd>Free-floating RNA that ends up in droplets alongside a cell's own RNA.</dd>
+      <dt>Discordant fraction</dt><dd>Share of SNPs, readable in both genotype profiles, where the profiles disagree. Mother–fetus about 0.5; one person split in two well below 0.40.</dd>
+      <dt>Doublet</dt><dd>A droplet that captured two cells; excluded.</dd>
+      <dt>Genotype</dt><dd>The set of DNA variants a person carries.</dd>
+      <dt>Genotype profile</dt><dd>The genotype inferred for one group of cells: 0, 1 or 2 copies of the alternative version at each SNP.</dd>
+      <dt>Pregnancy group</dt><dd>All libraries from one pregnancy (one mother, one fetus); the samplesheet's <code>group_id</code>.</dd>
+      <dt>RPS4Y1</dt><dd>A gene on the Y chromosome; its expression marks male (fetal) cells.</dd>
+      <dt>Singlet</dt><dd>A droplet with exactly one cell.</dd>
+      <dt>SNP</dt><dd>A DNA position where people commonly differ.</dd>
+      <dt>Souporcell</dt><dd>The tool that groups cells by genotype.</dd>
+      <dt>Spike-in test</dt><dd>A synthetic sample with a known number of cells of known origin mixed in.</dd>
+      <dt>Trophoblast</dt><dd>Fetal cells of the placenta; the source of the placental markers.</dd>
+    </dl>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="col">nf-demultiplex-matfet · <code>docs/pipeline_overview.html</code>. Data regenerated with <code>docs/build_overview_data.py</code>. Full evidence: <code>docs/pipeline_design.md</code>.</div>
+</footer>
+
+<div id="tip" role="tooltip"></div>
+<!-- The page is a single self-contained file. The data block below is rewritten by
+     docs/build_overview_data.py after a run; the chart code after it is edited here. -->
+<script id="pipeline-data">
+// Generated by docs/build_overview_data.py; do not edit by hand.
+window.PIPELINE_DATA = {"validation":[{"run":"spike f0_r1 A","truth":"fake","ambient":92.2,"minority":1450,"frac":0.274},{"run":"spike f0_r1 B","truth":"fake","ambient":94.2,"minority":1523,"frac":0.215},{"run":"spike f0_r1 full","truth":"fake","ambient":93.8,"minority":3057,"frac":0.224},{"run":"spike f0_r2 A","truth":"fake","ambient":92.9,"minority":1516,"frac":0.256},{"run":"spike f0_r2 B","truth":"fake","ambient":90.1,"minority":1484,"frac":0.274},{"run":"spike f0_r2 full","truth":"fake","ambient":94.1,"minority":3040,"frac":0.228},{"run":"spike f0p5_r1 A","truth":"weak","ambient":46.1,"minority":23,"frac":0.855},{"run":"spike f0p5_r1 B","truth":"weak","ambient":42.9,"minority":17,"frac":0.861},{"run":"spike f0p5_r1 full","truth":"weak","ambient":96.0,"minority":41,"frac":0.941},{"run":"spike f0p5_r2 A","truth":"weak","ambient":14.0,"minority":28,"frac":0.639},{"run":"spike f0p5_r2 B","truth":"weak","ambient":96.7,"minority":23,"frac":0.945},{"run":"spike f0p5_r2 full","truth":"weak","ambient":94.9,"minority":42,"frac":0.931},{"run":"spike f10_r1 A","truth":"real","ambient":1.3,"minority":343,"frac":0.588},{"run":"spike f10_r1 B","truth":"real","ambient":1.3,"minority":350,"frac":0.589},{"run":"spike f10_r1 full","truth":"real","ambient":1.3,"minority":755,"frac":0.55},{"run":"spike f10_r2 A","truth":"real","ambient":1.3,"minority":344,"frac":0.589},{"run":"spike f10_r2 B","truth":"real","ambient":1.3,"minority":356,"frac":0.589},{"run":"spike f10_r2 full","truth":"real","ambient":1.3,"minority":758,"frac":0.549},{"run":"spike f1_r1 A","truth":"real","ambient":4.8,"minority":43,"frac":0.644},{"run":"spike f1_r1 B","truth":"real","ambient":9.6,"minority":30,"frac":0.649},{"run":"spike f1_r1 full","truth":"real","ambient":7.4,"minority":71,"frac":0.629},{"run":"spike f1_r2 A","truth":"real","ambient":6.9,"minority":37,"frac":0.655},{"run":"spike f1_r2 B","truth":"real","ambient":8.2,"minority":41,"frac":0.653},{"run":"spike f1_r2 full","truth":"real","ambient":9.1,"minority":79,"frac":0.632},{"run":"spike f2_r1 A","truth":"real","ambient":3.0,"minority":74,"frac":0.631},{"run":"spike f2_r1 B","truth":"real","ambient":2.3,"minority":70,"frac":0.631},{"run":"spike f2_r1 full","truth":"real","ambient":2.9,"minority":143,"frac":0.606},{"run":"spike f2_r2 A","truth":"real","ambient":3.3,"minority":75,"frac":0.635},{"run":"spike f2_r2 B","truth":"real","ambient":3.1,"minority":74,"frac":0.631},{"run":"spike f2_r2 full","truth":"real","ambient":3.5,"minority":148,"frac":0.607},{"run":"spike f5_r1 A","truth":"real","ambient":1.7,"minority":183,"frac":0.616},{"run":"spike f5_r1 B","truth":"real","ambient":1.5,"minority":145,"frac":0.616},{"run":"spike f5_r1 full","truth":"real","ambient":1.8,"minority":237,"frac":0.597},{"run":"spike f5_r1 full_s2","truth":"real","ambient":1.9,"minority":233,"frac":0.597},{"run":"spike f5_r1 full_s3","truth":"real","ambient":1.8,"minority":237,"frac":0.597},{"run":"spike f5_r2 A","truth":"real","ambient":1.7,"minority":150,"frac":0.614},{"run":"spike f5_r2 B","truth":"real","ambient":1.5,"minority":156,"frac":0.614},{"run":"spike f5_r2 full","truth":"real","ambient":1.7,"minority":255,"frac":0.59},{"run":"spike f5_r2 full_s2","truth":"real","ambient":1.7,"minority":255,"frac":0.59},{"run":"spike f5_r2 full_s3","truth":"real","ambient":1.7,"minority":255,"frac":0.59},{"run":"CW5/D6 joint_seed1","truth":"real","ambient":1.8,"minority":927,"frac":0.527},{"run":"CW5/D6 joint_seed2","truth":"real","ambient":1.8,"minority":925,"frac":0.527},{"run":"CW5/D6 joint_seed3","truth":"real","ambient":1.8,"minority":927,"frac":0.527},{"run":"CW5/D6 anchor_discovery","truth":"real","ambient":2.1,"minority":928,"frac":0.548},{"run":"CW5/D6 d6_forced_k2","truth":"unknown","ambient":15.7,"minority":51,"frac":0.638},{"run":"CW4 discovery_all5","truth":"fake","ambient":100.0,"minority":56,"frac":null},{"run":"CW4 discovery_balanced2k","truth":"fake","ambient":99.9,"minority":0,"frac":null},{"run":"CW4 discovery_trio_early","truth":"fake","ambient":90.9,"minority":9115,"frac":0.262},{"run":"CW4 discovery_trio_late","truth":"fake","ambient":99.9,"minority":15,"frac":null},{"run":"CW4 discovery_trio_mixed","truth":"fake","ambient":99.9,"minority":23,"frac":null},{"run":"perlib Embryo-Imp15289123","truth":"fake","ambient":95.9,"minority":2047,"frac":0.17},{"run":"perlib Embryo-Imp15289124","truth":"fake","ambient":83.9,"minority":6554,"frac":0.303},{"run":"perlib Embryo-Imp15289125","truth":"fake","ambient":89.3,"minority":1578,"frac":0.245},{"run":"perlib Embryo-Imp15289126","truth":"fake","ambient":90.1,"minority":3276,"frac":0.252},{"run":"perlib Embryo-Imp15289127","truth":"fake","ambient":99.8,"minority":3,"frac":null},{"run":"perlib Embryo-Imp15350362","truth":"real","ambient":2.1,"minority":911,"frac":0.548},{"run":"perlib Embryo-Imp15350363","truth":"fake","ambient":91.6,"minority":3124,"frac":0.284},{"run":"perlib Embryo-Imp15350364","truth":"fake","ambient":90.3,"minority":1583,"frac":0.269},{"run":"perlib FCA7167231","truth":"unknown","ambient":16.3,"minority":47,"frac":0.635}],"groups":[{"group":"CW4","n":5,"frac":null,"ambient":100.0,"minority":56,"cells":36800,"verdict":"unresolved","label":"unresolved","conf":"unresolved","rule":"composition_gate","dataset":"Sanger_unpublished","chem":"3' v4","tissue":"Fallopian tube"},{"group":"CW5","n":3,"frac":0.527,"ambient":1.8,"minority":927,"cells":19336,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Sanger_unpublished","chem":"3' v4","tissue":"Fallopian tube"},{"group":"CW8","n":3,"frac":0.524,"ambient":2.5,"minority":893,"cells":31334,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Fallopian tube"},{"group":"CW7","n":1,"frac":0.563,"ambient":2.3,"minority":984,"cells":15726,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Fallopian tube"},{"group":"CW16","n":2,"frac":0.505,"ambient":2.4,"minority":2299,"cells":26198,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Fallopian tube"},{"group":"CW9","n":1,"frac":0.335,"ambient":75.6,"minority":5338,"cells":14862,"verdict":"unresolved","label":"unresolved","conf":"unresolved","rule":"composition_gate","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Fallopian tube"},{"group":"CW10","n":2,"frac":0.295,"ambient":62.5,"minority":6778,"cells":21099,"verdict":"unresolved","label":"unresolved","conf":"unresolved","rule":"composition_gate","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Fallopian tube"},{"group":"CW11","n":2,"frac":0.327,"ambient":70.1,"minority":8355,"cells":23573,"verdict":"unresolved","label":"unresolved","conf":"unresolved","rule":"composition_gate","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Fallopian tube"},{"group":"CW18","n":1,"frac":0.329,"ambient":79.7,"minority":7740,"cells":18790,"verdict":"unresolved","label":"unresolved","conf":"unresolved","rule":"composition_gate","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Fallopian tube"},{"group":"CW15","n":1,"frac":0.687,"ambient":33.8,"minority":313,"cells":14560,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Fallopian tube"},{"group":"Hrv302","n":1,"frac":0.587,"ambient":1.1,"minority":340,"cells":834,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Uterus"},{"group":"Hrv303","n":1,"frac":0.643,"ambient":15.9,"minority":339,"cells":7657,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Uterus"},{"group":"Hrv304","n":1,"frac":0.558,"ambient":2.6,"minority":365,"cells":10881,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Uterus"},{"group":"Hrv305","n":1,"frac":0.504,"ambient":2.1,"minority":4133,"cells":11739,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Sanger_unpublished","chem":"5' v3","tissue":"Uterus"},{"group":"D6","n":5,"frac":0.622,"ambient":2.2,"minority":1991,"cells":14568,"verdict":"two_profiles","label":"unresolved","conf":"unresolved","rule":"no_rule_fired","dataset":"Vento2018","chem":"3' v2","tissue":"Uterus"},{"group":"D7","n":4,"frac":0.267,"ambient":12.6,"minority":813,"cells":10435,"verdict":"unresolved","label":"unresolved","conf":"unresolved","rule":"composition_gate","dataset":"Vento2018","chem":"3' v2","tissue":"Uterus"},{"group":"D8","n":4,"frac":0.437,"ambient":1.4,"minority":6566,"cells":23028,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Vento2018","chem":"3' v2","tissue":"Uterus"},{"group":"D9","n":4,"frac":0.483,"ambient":1.8,"minority":4133,"cells":20522,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Vento2018","chem":"3' v2","tissue":"Uterus"},{"group":"D10","n":5,"frac":0.447,"ambient":1.6,"minority":6754,"cells":20790,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Vento2018","chem":"3' v2","tissue":"Uterus"},{"group":"D11","n":2,"frac":0.502,"ambient":14.2,"minority":200,"cells":5551,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Vento2018","chem":"3' v2","tissue":"Uterus"},{"group":"D12","n":6,"frac":0.503,"ambient":1.6,"minority":7027,"cells":16679,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Vento2018","chem":"3' v2","tissue":"Uterus"},{"group":"H2","n":2,"frac":0.572,"ambient":2.7,"minority":211,"cells":8446,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Arutyunyan2023","chem":"3' v3.0_3' v3.1_5' v1.0","tissue":"Uterus"},{"group":"Hrv43","n":3,"frac":0.719,"ambient":72.4,"minority":619,"cells":31795,"verdict":"two_profiles","label":"fetal_high_confidence_male","conf":"high","rule":"tier1_rps4y1_override","dataset":"Arutyunyan2023","chem":"3' v3.0_3' v3.1_5' v1.0","tissue":"Uterus"},{"group":"Hrv46","n":1,"frac":0.363,"ambient":92.6,"minority":5232,"cells":13472,"verdict":"unresolved","label":"unresolved","conf":"unresolved","rule":"composition_gate","dataset":"Arutyunyan2023","chem":"3' v3.0_3' v3.1_5' v1.0","tissue":"Uterus"},{"group":"Hrv98","n":1,"frac":0.539,"ambient":5.7,"minority":4301,"cells":14864,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Arutyunyan2023","chem":"3' v3.0_3' v3.1_5' v1.0","tissue":"Uterus"},{"group":"Hrv99","n":1,"frac":0.552,"ambient":11.5,"minority":608,"cells":13694,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Arutyunyan2023","chem":"3' v3.0_3' v3.1_5' v1.0","tissue":"Uterus"},{"group":"Hrv100","n":1,"frac":0.581,"ambient":11.2,"minority":468,"cells":20039,"verdict":"two_profiles","label":"fetal_marker_supported","conf":"provisional","rule":"tier2_secondary_marker_vote","dataset":"Arutyunyan2023","chem":"3' v3.0_3' v3.1_5' v1.0","tissue":"Uterus"}],"libraries":[{"lib":"Embryo-Imp15289123","group":"CW4","region":"FT_Fimbriae","sort":"FACS_Live","tissue":"Fallopian tube","singlets":4126,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp15289124","group":"CW4","region":"FT_Ampulla","sort":"FACS_Live","tissue":"Fallopian tube","singlets":11975,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp15289125","group":"CW4","region":"FT_Ampulla","sort":"FACS_Live_HLA-Gpos","tissue":"Fallopian tube","singlets":3020,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp15289126","group":"CW4","region":"FT_Isthmus","sort":"FACS_Live","tissue":"Fallopian tube","singlets":6203,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp15289127","group":"CW4","region":"FT_Isthmus","sort":"FACS_Live_HLA-Gpos","tissue":"Fallopian tube","singlets":3502,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp15350362","group":"CW5","region":"FT_Infundibulum","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":6342,"fetal":915,"pct":14.4,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp15350363","group":"CW5","region":"FT_Ampulla","sort":"FACS_Live","tissue":"Fallopian tube","singlets":7392,"fetal":9,"pct":0.1,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp15350364","group":"CW5","region":"FT_Isthmus","sort":"FACS_Live","tissue":"Fallopian tube","singlets":3757,"fetal":3,"pct":0.1,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp16368443","group":"CW8","region":"FT_Isthmus","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":3067,"fetal":662,"pct":21.6,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp16368441","group":"CW8","region":"FT_Mixed","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":16604,"fetal":3,"pct":0.0,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp16368442","group":"CW8","region":"FT_Infundibulum","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":9622,"fetal":228,"pct":2.4,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp16368446","group":"CW7","region":"FT_Ampulla","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":14905,"fetal":984,"pct":6.6,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp16368447","group":"CW16","region":"FT_Mixed","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":14346,"fetal":3,"pct":0.0,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp16368448","group":"CW16","region":"FT_Ampulla","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":10028,"fetal":2296,"pct":22.9,"oriented":true,"verdict":"two_profiles"},{"lib":"Embryo-Imp16368440","group":"CW9","region":"FT_Mixed","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":11328,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp16368438","group":"CW10","region":"FT_Mixed","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":8733,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp16368439","group":"CW10","region":"FT_Mixed","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":5538,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp16368435","group":"CW11","region":"FT_Mixed","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":8264,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp16368436","group":"CW11","region":"FT_Isthmus","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":9081,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp16418128","group":"CW18","region":"FT_Mixed","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":15604,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Embryo-Imp16418129","group":"CW15","region":"FT_Mixed","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos","tissue":"Fallopian tube","singlets":10759,"fetal":313,"pct":2.9,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR16765696","group":"Hrv302","region":"Decidua, placenta","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos; FACS_Live_EPCAMpos","tissue":"Uterus","singlets":712,"fetal":340,"pct":47.8,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR16765697","group":"Hrv303","region":"Decidua, placenta","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos; FACS_Live_EPCAMpos","tissue":"Uterus","singlets":5080,"fetal":339,"pct":6.7,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR16765698","group":"Hrv304","region":"Decidua, placenta","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos; FACS_Live_EPCAMpos","tissue":"Uterus","singlets":8838,"fetal":365,"pct":4.1,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR16765699","group":"Hrv305","region":"Decidua, placenta","sort":"FACS_Live_CD45pos; FACS_Live_CD45neg_HLA-Gpos; FACS_Live_EPCAMpos","tissue":"Uterus","singlets":10127,"fetal":4133,"pct":40.8,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7167219","group":"D6","region":"Decidua basalis, peripheral blood","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":631,"fetal":0,"pct":0.0,"oriented":false,"verdict":"two_profiles"},{"lib":"FCA7167223","group":"D6","region":"Decidua basalis, peripheral blood","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":7819,"fetal":0,"pct":0.0,"oriented":false,"verdict":"two_profiles"},{"lib":"FCA7167224","group":"D6","region":"Decidua basalis","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":2002,"fetal":0,"pct":0.0,"oriented":false,"verdict":"two_profiles"},{"lib":"FCA7167231","group":"D6","region":"Peripheral blood","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":1498,"fetal":0,"pct":0.0,"oriented":false,"verdict":"two_profiles"},{"lib":"FCA7167232","group":"D6","region":"Peripheral blood","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":1953,"fetal":0,"pct":0.0,"oriented":false,"verdict":"two_profiles"},{"lib":"FCA7167221","group":"D7","region":"Decidua basalis, peripheral blood","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":541,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"FCA7167222","group":"D7","region":"Decidua basalis","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":1335,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"FCA7167226","group":"D7","region":"Decidua basalis","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":5261,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"FCA7167230","group":"D7","region":"Peripheral blood","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":198,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"FCA7196218","group":"D8","region":"Decidua basalis, peripheral blood","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":7857,"fetal":1,"pct":0.0,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7196219","group":"D8","region":"Decidua basalis","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":3409,"fetal":5,"pct":0.1,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7196220","group":"D8","region":"Placenta","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":7036,"fetal":6560,"pct":93.2,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7196231","group":"D8","region":"Unknown","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":4584,"fetal":0,"pct":0.0,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7196224","group":"D9","region":"Decidua basalis, peripheral blood","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":8077,"fetal":38,"pct":0.5,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7196225","group":"D9","region":"Decidua basalis","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":4228,"fetal":809,"pct":19.1,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7196226","group":"D9","region":"Placenta","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":4033,"fetal":3285,"pct":81.5,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7196229","group":"D9","region":"Unknown","sort":"FACS_Live_CD45pos","tissue":"Uterus","singlets":3081,"fetal":1,"pct":0.0,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7474062","group":"D10","region":"Decidua basalis","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":3332,"fetal":16,"pct":0.5,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7474063","group":"D10","region":"Decidua basalis","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":2741,"fetal":192,"pct":7.0,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7474064","group":"D10","region":"Placenta","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":4746,"fetal":4352,"pct":91.7,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7474065","group":"D10","region":"Placenta","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":4651,"fetal":4239,"pct":91.1,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7474066","group":"D10","region":"Placenta","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":4912,"fetal":4829,"pct":98.3,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7474068","group":"D11","region":"Placenta","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":4241,"fetal":4058,"pct":95.7,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7474069","group":"D11","region":"Placenta","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":473,"fetal":456,"pct":96.4,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7511881","group":"D12","region":"Decidua basalis","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":1963,"fetal":2,"pct":0.1,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7511882","group":"D12","region":"Decidua basalis","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":2311,"fetal":10,"pct":0.4,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7511884","group":"D12","region":"Placenta","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":4381,"fetal":2689,"pct":61.4,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7511883","group":"D12","region":"Decidua basalis","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":487,"fetal":305,"pct":62.6,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7511885","group":"D12","region":"Placenta","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":3803,"fetal":3451,"pct":90.7,"oriented":true,"verdict":"two_profiles"},{"lib":"FCA7511886","group":"D12","region":"Placenta","sort":"FACS_Live_CD45pos; FACS_EPCAMpos; FACS_HLA-Gpos","tissue":"Uterus","singlets":3060,"fetal":2521,"pct":82.4,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR8624430","group":"H2","region":"Decidua basalis","sort":"N/A","tissue":"Uterus","singlets":3247,"fetal":25,"pct":0.8,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR8624431","group":"H2","region":"Decidua basalis","sort":"N/A","tissue":"Uterus","singlets":4890,"fetal":186,"pct":3.8,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR10701667","group":"Hrv43","region":"Decidua basalis","sort":"N/A","tissue":"Uterus","singlets":4799,"fetal":318,"pct":6.6,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR10142767","group":"Hrv43","region":"Decidua basalis","sort":"N/A","tissue":"Uterus","singlets":5817,"fetal":137,"pct":2.4,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR10142768","group":"Hrv43","region":"Decidua basalis","sort":"N/A","tissue":"Uterus","singlets":5881,"fetal":164,"pct":2.8,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR10701668","group":"Hrv46","region":"Placenta, decidua basalis","sort":"N/A","tissue":"Uterus","singlets":10841,"fetal":0,"pct":0.0,"oriented":false,"verdict":"unresolved"},{"lib":"Pla_HDBR10917730","group":"Hrv98","region":"Placenta","sort":"N/A","tissue":"Uterus","singlets":13681,"fetal":4301,"pct":31.4,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR10917731","group":"Hrv99","region":"Placenta","sort":"N/A","tissue":"Uterus","singlets":11559,"fetal":10951,"pct":94.7,"oriented":true,"verdict":"two_profiles"},{"lib":"Pla_HDBR10917733","group":"Hrv100","region":"Placenta","sort":"N/A","tissue":"Uterus","singlets":18476,"fetal":468,"pct":2.5,"oriented":true,"verdict":"two_profiles"}],"spikein":[{"fraction":0.0,"rep":1,"n_fetal":0,"recall":null,"precision":null,"ambient":93.8,"frac":0.224},{"fraction":0.0,"rep":2,"n_fetal":0,"recall":null,"precision":null,"ambient":94.1,"frac":0.228},{"fraction":0.005,"rep":1,"n_fetal":35,"recall":1.0,"precision":0.8537,"ambient":96.0,"frac":0.941},{"fraction":0.005,"rep":2,"n_fetal":35,"recall":1.0,"precision":0.8333,"ambient":94.9,"frac":0.931},{"fraction":0.01,"rep":1,"n_fetal":71,"recall":0.9859,"precision":0.9859,"ambient":7.4,"frac":0.629},{"fraction":0.01,"rep":2,"n_fetal":71,"recall":0.9859,"precision":0.8861,"ambient":9.1,"frac":0.632},{"fraction":0.02,"rep":1,"n_fetal":143,"recall":1.0,"precision":1.0,"ambient":2.9,"frac":0.606},{"fraction":0.02,"rep":2,"n_fetal":143,"recall":0.993,"precision":0.9595,"ambient":3.5,"frac":0.607},{"fraction":0.05,"rep":1,"n_fetal":368,"recall":0.644,"precision":1.0,"ambient":1.8,"frac":0.597},{"fraction":0.05,"rep":2,"n_fetal":368,"recall":0.6929,"precision":1.0,"ambient":1.7,"frac":0.59},{"fraction":0.1,"rep":1,"n_fetal":778,"recall":0.9704,"precision":1.0,"ambient":1.3,"frac":0.55},{"fraction":0.1,"rep":2,"n_fetal":778,"recall":0.9743,"precision":1.0,"ambient":1.3,"frac":0.549}]};
+</script>
+<script>
+/* Charts and tables. Data come from the block above (window.PIPELINE_DATA). Each chart
+ * draws into an element id on this page; a missing id is skipped. */
+
+const DATA = window.PIPELINE_DATA;
+const GATE = 0.40;
+const MIN_MINORITY = 20;
+const NS = "http://www.w3.org/2000/svg";
+const MIXUP = new Set(["D6", "D7"]);
+// Groups whose verdict changed when the ambient-RNA gate was replaced (2026-10-05).
+const CHANGED = new Set(["CW15", "Hrv43", "D7"]);
+const TRUTH = {
+  real:    { label: "Real split (mother and fetus)",   color: "var(--s-real)" },
+  fake:    { label: "Fake split (one person)",         color: "var(--s-fake)" },
+  weak:    { label: "Real, very weak (0.5% spike-in)", color: "var(--s-weak)" },
+  unknown: { label: "Unknown (D6 / D7)",               color: "var(--muted)", hollow: true },
+};
+
+/* ---------- helpers ---------- */
+const $ = (id) => document.getElementById(id);
+function el(tag, attrs = {}, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+function txt(parent, x, y, s, attrs = {}) {
+  const t = el("text", Object.assign({ x, y, "font-size": 12, fill: "var(--muted)" }, attrs), parent);
+  t.textContent = s;
+  return t;
+}
+const fmt = (n) => n.toLocaleString("en-GB");
+const fracText = (f, d = 3) => (f == null ? "none called" : f.toFixed(d));
+function prettyLabel(l) {
+  return { fetal_high_confidence_male: "Fetal, male (high)", fetal_marker_supported: "Fetal, likely female (provisional)", unresolved: "Not labelled" }[l] || l;
+}
+function gateVerdict(frac, minority) {
+  if (frac == null || frac < GATE) return "unresolved";
+  return minority < MIN_MINORITY ? "one_profile" : "two_profiles";
+}
+
+/* ---------- tooltip (also used for glossary terms) ---------- */
+const tip = $("tip");
+function placeTip(x, y) {
+  const r = tip.getBoundingClientRect();
+  let left = x + 14, top = y + 14;
+  if (left + r.width > window.innerWidth - 8) left = x - r.width - 14;
+  if (left < 8) left = 8;
+  if (top + r.height > window.innerHeight - 8) top = y - r.height - 14;
+  if (top < 8) top = 8;
+  tip.style.left = left + "px"; tip.style.top = top + "px";
+}
+function showTip(x, y, head, rows) {
+  tip.className = "on"; tip.replaceChildren();
+  if (head) { const h = document.createElement("div"); h.className = "t-head"; h.textContent = head; tip.appendChild(h); }
+  for (const r of rows) {
+    const d = document.createElement("div"); d.className = "t-row";
+    if (r.color) { const k = document.createElement("i"); k.className = "key"; k.style.background = r.color; d.appendChild(k); }
+    const b = document.createElement("b"); b.textContent = r.value; d.appendChild(b);
+    const s = document.createElement("span"); s.className = "k"; s.textContent = r.label; d.appendChild(s);
+    tip.appendChild(d);
+  }
+  placeTip(x, y);
+}
+function showDef(target) {
+  const r = target.getBoundingClientRect();
+  tip.className = "on def"; tip.replaceChildren(); tip.textContent = target.dataset.def;
+  placeTip(r.left, r.bottom - 6);
+}
+function hideTip() { tip.className = ""; }
+document.querySelectorAll(".term").forEach((t) => {
+  t.addEventListener("pointerenter", () => showDef(t));
+  t.addEventListener("pointerleave", hideTip);
+  t.addEventListener("focus", () => showDef(t));
+  t.addEventListener("blur", hideTip);
+});
+window.addEventListener("scroll", hideTip, { passive: true });
+
+function bindHover(node, head, rows) {
+  node.setAttribute("tabindex", "0");
+  node.style.cursor = "default";
+  node.addEventListener("pointermove", (e) => showTip(e.clientX, e.clientY, head, rows));
+  node.addEventListener("pointerleave", hideTip);
+  node.addEventListener("focus", () => { const r = node.getBoundingClientRect(); showTip(r.right, r.top, head, rows); });
+  node.addEventListener("blur", hideTip);
+}
+function dot(g, cx, cy, kind, r = 4.5) {
+  const t = TRUTH[kind];
+  return el("circle", t.hollow
+    ? { cx, cy, r, fill: "var(--surface)", stroke: t.color, "stroke-width": 2 }
+    : { cx, cy, r, fill: t.color, stroke: "var(--surface)", "stroke-width": 2 }, g);
+}
+function legend(id, kinds, extra = []) {
+  const L = $(id); if (!L) return; L.replaceChildren();
+  for (const k of kinds) {
+    const s = document.createElement("span"), w = document.createElement("i");
+    w.className = "sw" + (TRUTH[k].hollow ? " hollow" : ""); w.style.background = TRUTH[k].color;
+    if (TRUTH[k].hollow) w.style.borderColor = TRUTH[k].color;
+    s.appendChild(w); s.appendChild(document.createTextNode(TRUTH[k].label)); L.appendChild(s);
+  }
+  for (const x of extra) {
+    const s = document.createElement("span"), w = document.createElement("i");
+    w.className = "sw " + (x.cls || ""); if (x.color) w.style.background = x.color; if (x.border) w.style.borderColor = x.border;
+    s.appendChild(w); s.appendChild(document.createTextNode(x.label)); L.appendChild(s);
+  }
+}
+function table(containerId, cols, rows) {
+  const c = $(containerId); if (!c) return;
+  const t = document.createElement("table"), th = t.createTHead().insertRow();
+  for (const col of cols) { const h = document.createElement("th"); h.textContent = col.h; if (col.n) h.className = "n"; th.appendChild(h); }
+  const tb = t.createTBody();
+  for (const r of rows) {
+    const tr = tb.insertRow();
+    for (const col of cols) {
+      const td = tr.insertCell(); const v = col.f(r);
+      if (v instanceof Node) td.appendChild(v); else td.textContent = v;
+      if (col.n) td.className = "n";
+    }
+  }
+  c.replaceChildren(t);
+}
+function badge(verdict) {
+  const s = document.createElement("span");
+  const m = { two_profiles: ["good", "✓"], unresolved: ["neutral", "–"], one_profile: ["neutral", "◐"], running: ["muted", "…"] }[verdict];
+  s.className = "badge " + m[0];
+  const i = document.createElement("span"); i.className = "ic"; i.textContent = m[1];
+  s.appendChild(i); s.appendChild(document.createTextNode(verdict)); return s;
+}
+function prodKind(g) {
+  if (MIXUP.has(g.group)) return "unknown";
+  return g.label.startsWith("fetal") ? "real" : "fake";
+}
+const xAxis = (g, x, y0, ticks, f) => {
+  el("line", { x1: x(ticks[0]), x2: x(ticks[ticks.length - 1]), y1: y0, y2: y0, stroke: "var(--axis)" }, g);
+  for (const t of ticks) txt(g, x(t), y0 + 17, f(t), { "text-anchor": "middle", "font-variant-numeric": "tabular-nums" });
+};
+function svgFor(id, H, label) {
+  const box = $(id); if (!box) return null;
+  box.replaceChildren();
+  const W = box.clientWidth;
+  return { box, W, svg: el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": label }, box) };
+}
+const finished = () => DATA.groups.filter((g) => !g.pending);
+
+/* ---------- hero tiles ---------- */
+function drawTiles() {
+  if (!$("tiles")) return;
+  const done = finished();
+  const fetal = done.filter((g) => g.label.startsWith("fetal")).length;
+  const items = [
+    [fmt(DATA.groups.reduce((a, g) => a + g.n, 0)), "libraries in the REQ-68805 run"],
+    [String(DATA.groups.length), "pregnancy groups"],
+    [String(DATA.validation.filter((v) => v.truth !== "unknown").length), "test runs with a known answer"],
+    [`${fetal} of ${done.length}`, "groups with a fetus identified"],
+  ];
+  $("tiles").replaceChildren();
+  for (const [v, l] of items) {
+    const d = document.createElement("div"); d.className = "tile";
+    const a = document.createElement("div"); a.className = "v"; a.textContent = v;
+    const b = document.createElement("div"); b.className = "l"; b.textContent = l;
+    d.append(a, b); $("tiles").appendChild(d);
+  }
+}
+
+/* ---------- before / after (CW5) ---------- */
+function drawBeforeAfter() {
+  const t = $("ba-table"); if (!t) return;
+  const rows = [
+    ["362", [911, 5465], false, [915, 5427]],
+    ["363", [3277, 3124], true, [9, 7383]],
+    ["364", [1583, 1683], true, [3, 3754]],
+  ];
+  t.replaceChildren();
+  const h = t.createTHead().insertRow();
+  for (const s of ["Library", "Analysed alone (old)", "Analysed as a group (new)"]) { const th = document.createElement("th"); th.textContent = s; h.appendChild(th); }
+  const tb = t.createTBody();
+  const bar = (a, b, fake) => {
+    const wrap = document.createElement("div");
+    const lab = document.createElement("div"); lab.className = "small";
+    lab.textContent = fake ? `${fmt(a)} / ${fmt(b)}: two halves of the mother` : `${fmt(a)} fetal / ${fmt(b)} maternal`;
+    const sb = document.createElement("div"); sb.className = "split-bar";
+    const i1 = document.createElement("i"), i2 = document.createElement("i");
+    i1.style.flex = String(a); i2.style.flex = String(b);
+    i1.style.background = fake ? "var(--axis)" : "var(--s-real)"; i2.style.background = "var(--axis)";
+    sb.append(i1, i2); wrap.append(lab, sb); return wrap;
+  };
+  for (const [lib, old, fake, neu] of rows) {
+    const tr = tb.insertRow();
+    tr.insertCell().textContent = lib;
+    tr.insertCell().appendChild(bar(old[0], old[1], fake));
+    tr.insertCell().appendChild(bar(neu[0], neu[1], false));
+  }
+}
+
+/* ---------- genotype-profile illustration ---------- */
+function drawProfiles() {
+  const box = $("fig-profiles"); if (!box) return; box.replaceChildren();
+  const W = box.clientWidth, narrow = W < 620;
+  const n = 30, panelW = narrow ? W : (W - 40) / 2, cell = Math.min(16, (panelW - 70) / n);
+  const H = narrow ? 2 * 112 + 10 : 112;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": "Illustration: a real mother and fetus pair differs at about half of SNPs; two halves of one person differ only at a few noisy SNPs." }, box);
+  let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const mother = Array.from({ length: n }, () => (rnd() < 0.35 ? 0 : rnd() < 0.6 ? 1 : 2));
+  const fetus = mother.map((g) => { const m = g === 0 ? 0 : g === 2 ? 1 : rnd() < 0.5 ? 0 : 1; const p = rnd() < 0.4 ? 0 : 1; return m + p; });
+  const halfB = mother.map((g, i) => ([4, 13, 22, 27].includes(i) ? (g + 1) % 3 : g));
+  const panels = [
+    { title: "Real split: mother and fetus", a: mother, b: fetus },
+    { title: "Fake split: two halves of the mother", a: mother, b: halfB },
+  ];
+  const fill = ["var(--g0)", "var(--g1)", "var(--g2)"];
+  panels.forEach((p, k) => {
+    const ox = narrow ? 0 : k * (panelW + 40), oy = narrow ? k * 122 : 0;
+    const g = el("g", { transform: `translate(${ox},${oy})` }, svg);
+    let diff = 0; p.a.forEach((v, i) => { if (v !== p.b[i]) diff++; });
+    txt(g, 0, 14, p.title, { "font-size": 13, "font-weight": 650, fill: "var(--ink)" });
+    txt(g, 0, 31, `differ at ${diff} of ${n} SNPs (${(diff / n).toFixed(2)})`, { "font-size": 12, fill: "var(--ink-2)" });
+    [p.a, p.b].forEach((row, r) => {
+      const y = 44 + r * (cell + 18);
+      txt(g, 0, y + cell * 0.75, r ? "Cluster B" : "Cluster A", { "font-size": 11 });
+      row.forEach((v, i) => {
+        const rect = el("rect", { x: 66 + i * cell, y, width: cell - 2, height: cell, rx: 2, fill: fill[v] }, g);
+        bindHover(rect, `SNP ${i + 1}`, [{ value: `${v} ${v === 1 ? "copy" : "copies"}`, label: r ? "Cluster B" : "Cluster A" }, { value: p.a[i] === p.b[i] ? "same" : "different", label: "between clusters" }]);
+      });
+    });
+    p.a.forEach((v, i) => { if (v !== p.b[i]) el("circle", { cx: 66 + i * cell + (cell - 2) / 2, cy: 44 + cell + 9, r: 2.5, fill: "var(--ink)" }, g); });
+  });
+  const L = $("prof-legend"); if (!L) return; L.replaceChildren();
+  ["0 copies", "1 copy", "2 copies"].forEach((s, i) => { const sp = document.createElement("span"), w = document.createElement("i"); w.className = "sw"; w.style.borderRadius = "2px"; w.style.background = fill[i]; sp.append(w, document.createTextNode(s)); L.appendChild(sp); });
+  const sp = document.createElement("span"), w = document.createElement("i"); w.className = "sw"; w.style.width = "6px"; w.style.height = "6px"; w.style.background = "var(--ink)"; sp.append(w, document.createTextNode("calls differ")); L.appendChild(sp);
+}
+
+/* ---------- spike-in chart ---------- */
+function drawSpike() {
+  const S = svgFor("fig-spike", 330, "Recall and precision of Souporcell discovery by fetal fraction"); if (!S) return;
+  const { W, svg } = S, narrow = W < 520, H = 330, m = { l: 44, r: narrow ? 16 : 86, t: 14, b: 78 };
+  const cats = [0, 0.005, 0.01, 0.02, 0.05, 0.1];
+  const catLab = (f) => +(f * 100).toFixed(1) + "%";
+  const step = (W - m.l - m.r) / cats.length;
+  const x = (i) => m.l + step * (i + 0.5);
+  const y = (v) => m.t + (1 - v) * (H - m.t - m.b);
+  const g = el("g", {}, svg);
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    el("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)" }, g);
+    txt(g, m.l - 8, y(t) + 4, t.toFixed(2), { "text-anchor": "end", "font-variant-numeric": "tabular-nums" });
+  }
+  el("line", { x1: m.l, x2: W - m.r, y1: y(0), y2: y(0), stroke: "var(--axis)" }, g);
+  const series = [{ key: "recall", name: "Recall", color: "var(--s-real)" }, { key: "precision", name: "Precision", color: "var(--s-fake)" }];
+  cats.forEach((f, i) => {
+    const runs = DATA.spikein.filter((s) => s.fraction === f);
+    txt(g, x(i), y(0) + 18, catLab(f), { "text-anchor": "middle", fill: "var(--ink-2)", "font-size": 12 });
+    txt(g, x(i), y(0) + 33, runs[0].n_fetal ? (narrow ? String(runs[0].n_fetal) : `${runs[0].n_fetal} cells`) : (narrow ? "0" : "none"), { "text-anchor": "middle", "font-size": 11 });
+    const accepted = runs.every((r) => r.frac >= GATE);
+    txt(g, x(i), y(0) + 58, accepted ? (narrow ? "✓" : "✓ accepted") : (narrow ? "–" : "– rejected"), { "text-anchor": "middle", "font-size": narrow ? 14 : 11.5, "font-weight": 600, fill: accepted ? "var(--good-text)" : "var(--ink-2)" });
+    if (!runs[0].n_fetal) { txt(g, x(i), y(0.5), "no fetal", { "text-anchor": "middle", "font-size": 11 }); txt(g, x(i), y(0.5) + 14, "cells", { "text-anchor": "middle", "font-size": 11 }); }
+  });
+  txt(g, 0, y(0) + 58, "Gate", { "font-size": 11.5, "font-weight": 600, fill: "var(--ink-2)" });
+  if (narrow) txt(g, 0, y(0) + 33, "Cells", { "font-size": 11, fill: "var(--ink-2)" });
+  series.forEach((s, si) => {
+    const pts = cats.map((f, i) => { const r = DATA.spikein.filter((d) => d.fraction === f && d[s.key] != null); return r.length ? [i, r.reduce((a, b) => a + b[s.key], 0) / r.length, r] : null; }).filter(Boolean);
+    el("path", { d: pts.map((p, k) => `${k ? "L" : "M"}${x(p[0])},${y(p[1])}`).join(""), fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }, g);
+    pts.forEach(([i, , runs]) => runs.forEach((r) => {
+      const cx = x(i) + (si ? 7 : -7), cy = y(r[s.key]);
+      el("circle", { cx, cy, r: 4.5, fill: s.color, stroke: "var(--surface)", "stroke-width": 2 }, g);
+      const hit = el("circle", { cx, cy, r: 12, fill: "transparent" }, g);
+      bindHover(hit, `${catLab(r.fraction)} fetal, replicate ${r.rep}`, [
+        { value: r[s.key].toFixed(2), label: s.name, color: s.color },
+        { value: String(r.n_fetal), label: "fetal cells spiked in" },
+        { value: r.frac.toFixed(2), label: "discordant fraction" },
+      ]);
+    }));
+    if (!narrow) { const last = pts[pts.length - 1]; txt(g, x(last[0]) + 16, y(last[1]) + (si ? 14 : -4), s.name, { fill: "var(--ink-2)", "font-size": 12 }); }
+  });
+  legend("spike-legend", [], series.map((s) => ({ label: s.name, color: s.color, cls: "line" })));
+  table("tbl-spike", [
+    { h: "Fetal fraction", f: (r) => catLab(r.fraction) }, { h: "Replicate", f: (r) => r.rep, n: 1 }, { h: "Fetal cells", f: (r) => r.n_fetal, n: 1 },
+    { h: "Recall", f: (r) => (r.recall == null ? "–" : r.recall.toFixed(2)), n: 1 }, { h: "Precision", f: (r) => (r.precision == null ? "–" : r.precision.toFixed(2)), n: 1 },
+    { h: "Discordant fraction", f: (r) => r.frac.toFixed(3), n: 1 }, { h: "Ambient %", f: (r) => r.ambient.toFixed(1), n: 1 }, { h: "Gate", f: (r) => (r.frac >= GATE ? "accepted" : "rejected") },
+  ], DATA.spikein);
+}
+
+/* ---------- gate: strip of every run ---------- */
+function gatePoints() {
+  const v = DATA.validation.filter((d) => d.frac != null).map((d) => ({ src: "Validation", name: d.run, kind: d.truth, frac: d.frac, ambient: d.ambient, minority: d.minority }));
+  const p = finished().filter((g) => g.frac != null).map((g) => ({ src: "Production", name: g.group, kind: prodKind(g), frac: g.frac, ambient: g.ambient, minority: g.minority, changed: CHANGED.has(g.group) }));
+  return [v, p];
+}
+function drawGate() {
+  const S = svgFor("fig-gate", 250, "Discordant fraction of validation and production runs, with the 0.40 gate threshold"); if (!S) return;
+  const { W, svg } = S, narrow = W < 560, H = 250, m = { l: narrow ? 12 : 104, r: 18, t: 34, b: 36 };
+  const x = (v) => m.l + v * (W - m.l - m.r);
+  const rows = gatePoints(), rowH = (H - m.t - m.b) / 2;
+  const g = el("g", {}, svg);
+  for (const t of [0, 0.2, 0.4, 0.6, 0.8, 1]) el("line", { x1: x(t), x2: x(t), y1: m.t, y2: H - m.b, stroke: "var(--grid)" }, g);
+  el("rect", { x: x(0), y: m.t, width: x(GATE) - x(0), height: H - m.t - m.b, fill: "var(--wash)" }, g);
+  xAxis(g, x, H - m.b, [0, 0.2, 0.4, 0.6, 0.8, 1], (t) => t.toFixed(1));
+  el("line", { x1: x(GATE), x2: x(GATE), y1: m.t - 8, y2: H - m.b, stroke: "var(--ink-2)", "stroke-width": 1.5 }, g);
+  txt(g, x(GATE) - 6, m.t - 14, narrow ? "◀ rejected" : "◀ rejected: one person", { "text-anchor": "end", "font-size": 11.5, fill: "var(--ink-2)" });
+  txt(g, x(GATE) + 6, m.t - 14, narrow ? "accepted ▶" : "accepted: two people ▶", { "font-size": 11.5, fill: "var(--ink-2)" });
+  if (!narrow) txt(g, x(GATE) + 4, H - m.b - 6, "gate 0.40", { "font-size": 11, fill: "var(--ink-2)" });
+  ["Validation", "Production"].forEach((name, ri) => {
+    const cy = m.t + rowH * (ri + 0.5);
+    if (!narrow) txt(g, m.l - 12, cy + 4, name, { "text-anchor": "end", "font-size": 12.5, fill: "var(--ink-2)", "font-weight": 600 });
+    else txt(g, m.l + 2, m.t + rowH * ri + 12, name, { "font-size": 11.5, fill: "var(--ink-2)", "font-weight": 600 });
+    rows[ri].forEach((d, i) => {
+      const cy2 = cy + (((i * 37) % 13) - 6) * (rowH / 18);
+      dot(g, x(d.frac), cy2, d.kind);
+      const hit = el("circle", { cx: x(d.frac), cy: cy2, r: 12, fill: "transparent" }, g);
+      bindHover(hit, d.name, [
+        { value: d.frac.toFixed(3), label: "discordant fraction" },
+        { value: TRUTH[d.kind].label, label: "" },
+        { value: fmt(d.minority), label: "cells in smaller cluster" },
+        { value: d.ambient.toFixed(1) + "%", label: "ambient RNA (old gate)" },
+      ]);
+      if (ri === 1 && ["CW15", "Hrv43", "D7"].includes(d.name)) {
+        const up = d.name !== "Hrv43";
+        txt(g, x(d.frac), cy2 + (up ? -11 : 20), d.name + (d.changed ? " ↺" : ""), { "text-anchor": "middle", "font-size": 11.5, fill: "var(--ink)" });
+      }
+    });
+  });
+  legend("gate-legend", ["real", "fake", "weak", "unknown"]);
+  table("tbl-gate", [
+    { h: "Set", f: (d) => d.src }, { h: "Run / group", f: (d) => d.name }, { h: "Truth", f: (d) => TRUTH[d.kind].label },
+    { h: "Discordant fraction", f: (d) => d.frac.toFixed(3), n: 1 }, { h: "Smaller cluster", f: (d) => fmt(d.minority), n: 1 },
+    { h: "Ambient %", f: (d) => d.ambient.toFixed(1), n: 1 }, { h: "Gate", f: (d) => gateVerdict(d.frac, d.minority) },
+  ], rows[0].concat(rows[1]).sort((a, b) => a.frac - b.frac));
+}
+
+/* ---------- gate: ambient against fraction ---------- */
+function drawAmbient() {
+  const S = svgFor("fig-ambient", 360, "Ambient RNA against discordant fraction for every run"); if (!S) return;
+  const { W, svg } = S, H = 360, m = { l: 48, r: 18, t: 18, b: 44 };
+  const x = (v) => m.l + (v / 100) * (W - m.l - m.r), y = (v) => m.t + (1 - v) * (H - m.t - m.b);
+  const g = el("g", {}, svg);
+  el("rect", { x: x(20), y: m.t, width: x(80) - x(20), height: H - m.t - m.b, fill: "var(--wash)" }, g);
+  for (const t of [0, 0.2, 0.4, 0.6, 0.8, 1]) { el("line", { x1: m.l, x2: W - m.r, y1: y(t), y2: y(t), stroke: "var(--grid)" }, g); txt(g, m.l - 8, y(t) + 4, t.toFixed(1), { "text-anchor": "end", "font-variant-numeric": "tabular-nums" }); }
+  xAxis(g, x, H - m.b, [0, 20, 40, 60, 80, 100], (t) => t + "%");
+  txt(g, (m.l + W - m.r) / 2, H - 6, "Ambient RNA fitted by consensus.py", { "text-anchor": "middle", "font-size": 12, fill: "var(--ink-2)" });
+  txt(g, 12, (m.t + H - m.b) / 2, "Discordant fraction", { "text-anchor": "middle", "font-size": 12, fill: "var(--ink-2)", transform: `rotate(-90 12 ${(m.t + H - m.b) / 2})` });
+  el("line", { x1: m.l, x2: W - m.r, y1: y(GATE), y2: y(GATE), stroke: "var(--ink-2)", "stroke-width": 1.5 }, g);
+  txt(g, W - m.r - 4, y(GATE) - 6, "gate 0.40", { "text-anchor": "end", "font-size": 11, fill: "var(--ink-2)" });
+  txt(g, x(50), m.t + 14, "old review zone", { "text-anchor": "middle", "font-size": 11, fill: "var(--ink-2)" });
+  const [v, p] = gatePoints();
+  v.concat(p).forEach((d) => {
+    dot(g, x(d.ambient), y(d.frac), d.kind);
+    const hit = el("circle", { cx: x(d.ambient), cy: y(d.frac), r: 12, fill: "transparent" }, g);
+    bindHover(hit, d.name, [{ value: d.frac.toFixed(3), label: "discordant fraction" }, { value: d.ambient.toFixed(1) + "%", label: "ambient RNA" }, { value: TRUTH[d.kind].label, label: "" }]);
+    if (d.src === "Production" && ["CW15", "Hrv43", "D7"].includes(d.name)) txt(g, x(d.ambient) + 9, y(d.frac) + 4, d.name, { "font-size": 11.5, fill: "var(--ink)" });
+  });
+  legend("amb-legend", ["real", "fake", "weak", "unknown"]);
+}
+
+/* ---------- gate performance (definition section) ---------- */
+function drawPerformance() {
+  if (!$("tbl-perf")) return;
+  const V = DATA.validation, P = finished();
+  const tally = (runs) => {
+    const c = { two_profiles: 0, one_profile: 0, unresolved: 0 };
+    runs.forEach((r) => c[gateVerdict(r.frac, r.minority)]++);
+    return c;
+  };
+  const rows = [
+    { set: "Test runs", what: "No fetus: 0% spike-ins, CW4, per-library fake splits", runs: V.filter((r) => r.truth === "fake" && r.frac != null), want: "unresolved" },
+    { set: "Test runs", what: "Collapsed to one genotype (no SNP called in both)", runs: V.filter((r) => r.frac == null), want: "unresolved" },
+    { set: "Test runs", what: "Real fetus: 1–10% spike-ins, CW5, library 362", runs: V.filter((r) => r.truth === "real"), want: "two_profiles" },
+    { set: "Test runs", what: "Real but very weak: 0.5% spike-ins (17–42 fetal cells)", runs: V.filter((r) => r.truth === "weak"), want: "two_profiles" },
+    { set: "Real data", what: "Fetus confirmed by markers (Y chromosome or placental)", runs: P.filter((g) => prodKind(g) === "real"), want: "two_profiles" },
+    { set: "Real data", what: "No fetal marker in either cluster, or collapsed (CW4)", runs: P.filter((g) => prodKind(g) === "fake"), want: "unresolved" },
+    { set: "Real data", what: "D6, D7: genotypes split by library (probable mix-up)", runs: P.filter((g) => prodKind(g) === "unknown"), want: null },
+  ];
+  table("tbl-perf", [
+    { h: "Set", f: (r) => r.set }, { h: "Runs with this answer", f: (r) => r.what }, { h: "Runs", f: (r) => r.runs.length, n: 1 },
+    { h: "Gate verdicts", f: (r) => { const c = tally(r.runs); return Object.entries(c).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(", "); } },
+    { h: "As expected", f: (r) => {
+        if (!r.want) return "no ground truth";
+        const c = tally(r.runs), ok = c[r.want];
+        return ok === r.runs.length ? `all ${ok}` : `${ok} of ${r.runs.length}` + (c.one_profile ? ` (${c.one_profile} too small: one_profile)` : "");
+      } },
+  ], rows);
+  const fracs = (rs) => rs.map((r) => r.frac).filter((f) => f != null);
+  const vf = fracs(V.filter((r) => r.truth === "fake")), vr = fracs(V.filter((r) => r.truth === "real"));
+  const pf = fracs(P.filter((g) => prodKind(g) === "fake")), pr = fracs(P.filter((g) => prodKind(g) === "real"));
+  const tiles = [
+    [Math.max(...vf).toFixed(2), "highest fake split, test runs"],
+    [Math.min(...vr).toFixed(2), "lowest real split, test runs"],
+    [Math.max(...pf).toFixed(2), "highest fake split, real data"],
+    [Math.min(...pr).toFixed(2), "lowest real split, real data"],
+  ];
+  const T = $("perf-tiles"); if (!T) return; T.replaceChildren();
+  for (const [v, l] of tiles) {
+    const d = document.createElement("div"); d.className = "tile";
+    const a = document.createElement("div"); a.className = "v"; a.textContent = v;
+    const b = document.createElement("div"); b.className = "l"; b.textContent = l;
+    d.append(a, b); T.appendChild(d);
+  }
+}
+
+/* ---------- results ---------- */
+function tissueCat(l) {
+  if (l.tissue === "Fallopian tube") return l.sort.includes("HLA-G") ? "Fallopian tube, HLA-G sort" : "Fallopian tube, live cells";
+  if (l.region === "Placenta") return l.sort === "N/A" ? "Placenta, unsorted" : "Placenta, sorted";
+  return { "Decidua basalis": "Decidua basalis", "Decidua basalis, peripheral blood": "Decidua + blood", "Peripheral blood": "Peripheral blood",
+    "Decidua, placenta": "Decidua + placenta", "Placenta, decidua basalis": "Decidua + placenta", "Unknown": "Region unknown" }[l.region] || l.region;
+}
+const TISSUE_ORDER = ["Placenta, sorted", "Placenta, unsorted", "Decidua + placenta", "Decidua basalis", "Decidua + blood", "Peripheral blood", "Region unknown", "Fallopian tube, HLA-G sort", "Fallopian tube, live cells"];
+function drawTissue() {
+  const box = $("fig-tissue"); if (!box) return; box.replaceChildren();
+  const W = box.clientWidth, narrow = W < 560, rowH = 34;
+  const cats = TISSUE_ORDER.filter((c) => DATA.libraries.some((l) => tissueCat(l) === c));
+  const rh = narrow ? rowH * 1.45 : rowH;
+  const m = { l: narrow ? 12 : 204, r: 18, t: 8, b: 34 }, H = m.t + m.b + rh * cats.length;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, height: H, role: "img", "aria-label": "Fetal share of each library by tissue" }, box);
+  const x = (v) => m.l + (v / 100) * (W - m.l - m.r);
+  const g = el("g", {}, svg);
+  for (const t of [0, 25, 50, 75, 100]) el("line", { x1: x(t), x2: x(t), y1: m.t, y2: H - m.b, stroke: "var(--grid)" }, g);
+  xAxis(g, x, H - m.b, [0, 25, 50, 75, 100], (t) => t + "%");
+  cats.forEach((c, ri) => {
+    const top = m.t + ri * rh, cy = top + (narrow ? rh * 0.62 : rh / 2);
+    if (narrow) txt(g, m.l, top + 12, c, { "font-size": 11.5, fill: "var(--ink-2)", "font-weight": 600 });
+    else txt(g, m.l - 12, cy + 4, c, { "text-anchor": "end", "font-size": 12, fill: "var(--ink-2)" });
+    DATA.libraries.filter((l) => tissueCat(l) === c).forEach((l, i) => {
+      const cy2 = cy + (((i * 5) % 5) - 2) * 3.2;
+      el("circle", l.oriented ? { cx: x(l.pct), cy: cy2, r: 4.5, fill: "var(--s-real)", stroke: "var(--surface)", "stroke-width": 2 }
+        : { cx: x(l.pct), cy: cy2, r: 4.5, fill: "var(--surface)", stroke: "var(--muted)", "stroke-width": 2 }, g);
+      const hit = el("circle", { cx: x(l.pct), cy: cy2, r: 12, fill: "transparent" }, g);
+      bindHover(hit, `${l.lib} (${l.group})`, [
+        { value: l.oriented ? `${l.pct}%` : "not measured", label: l.oriented ? `fetal (${fmt(l.fetal)} of ${fmt(l.singlets)} singlets)` : `group ${l.verdict === "unresolved" ? "unresolved by gate" : "has no marker evidence"}` },
+        { value: l.region, label: "region" }, { value: l.sort, label: "sort" },
+      ]);
+    });
+  });
+  legend("tis-legend", [], [{ label: "Fetal share measured", color: "var(--s-real)" }, { label: "Group not labelled", cls: "hollow", border: "var(--muted)" }]);
+  table("tbl-tissue", [
+    { h: "Library", f: (l) => l.lib }, { h: "Group", f: (l) => l.group }, { h: "Tissue", f: (l) => tissueCat(l) }, { h: "Sort", f: (l) => l.sort },
+    { h: "Singlets", f: (l) => fmt(l.singlets), n: 1 }, { h: "Fetal", f: (l) => (l.oriented ? fmt(l.fetal) : "–"), n: 1 }, { h: "Fetal %", f: (l) => (l.oriented ? l.pct.toFixed(1) : "–"), n: 1 },
+  ], DATA.libraries.slice().sort((a, b) => TISSUE_ORDER.indexOf(tissueCat(a)) - TISSUE_ORDER.indexOf(tissueCat(b)) || b.pct - a.pct));
+}
+function drawResults() {
+  const done = finished(), pend = DATA.groups.filter((g) => g.pending);
+  const male = done.filter((g) => g.label === "fetal_high_confidence_male").length;
+  const fem = done.filter((g) => g.label === "fetal_marker_supported").length;
+  const unres = done.filter((g) => g.verdict === "unresolved").length;
+  const nolab = done.filter((g) => g.verdict === "two_profiles" && !g.label.startsWith("fetal")).length;
+  const nLib = DATA.groups.reduce((a, g) => a + g.n, 0);
+  if ($("res-summary")) $("res-summary").textContent = `${nLib} libraries in ${DATA.groups.length} pregnancy groups, from three datasets and four 10x chemistries. ` +
+    `In ${male + fem} groups a fetus was identified: ${male} male at high confidence (Y chromosome) and ${fem} likely female (placental markers, provisional). ` +
+    `${unres} were unresolved by the gate (no second genotype), and ${nolab} had two genotypes but no marker evidence for which is the fetus.` +
+    (pend.length ? ` Still running: ${pend.map((g) => g.group).join(", ")}.` : "");
+  const ds = { Sanger_unpublished: "Sanger (unpublished)", Vento2018: "Vento-Tormo 2018", Arutyunyan2023: "Arutyunyan 2023" };
+  table("tbl-groups", [
+    { h: "Group", f: (g) => g.group }, { h: "Libraries", f: (g) => g.n, n: 1 },
+    { h: "Data", f: (g) => (g.pending ? "" : `${ds[g.dataset]}, ${g.tissue.toLowerCase()}, ${g.chem.startsWith("3' v3") ? "3′ v3 / mixed" : g.chem.replace("'", "′")}`) },
+    { h: "Gate", f: (g) => { if (g.pending) return badge("running"); const s = document.createElement("span"); s.appendChild(badge(g.verdict)); if (CHANGED.has(g.group)) { const c = document.createElement("span"); c.className = "changed"; c.textContent = " ↺ changed"; s.appendChild(c); } return s; } },
+    { h: "Discordant fraction", f: (g) => (g.pending ? "" : fracText(g.frac, 2)), n: 1 },
+    { h: "Smaller cluster", f: (g) => (g.pending ? "" : fmt(g.minority)), n: 1 },
+    { h: "Fetal call", f: (g) => (g.pending ? "" : MIXUP.has(g.group) ? "Not labelled (metadata check)" : prettyLabel(g.label)) },
+  ], DATA.groups);
+}
+
+/* ---------- render + resize ---------- */
+function drawCharts() { drawProfiles(); drawSpike(); drawGate(); drawAmbient(); drawTissue(); }
+drawTiles(); drawBeforeAfter(); drawPerformance(); drawResults(); drawCharts();
+let resizeTimer; window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(drawCharts, 120); });
+</script>
+</body>
+</html>
