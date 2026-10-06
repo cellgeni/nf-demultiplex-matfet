@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Two-tier maternal/fetal cluster decision engine + barcode propagation.
 
-Design (see ROADMAP.md §8):
+Runs once per pregnancy group, on the group's Souporcell clusters, and only orients
+clusters the composition gate accepted (verdict two_profiles); for any other verdict
+every cluster stays unresolved. Design (see docs/pipeline_design.md, "Orientation"):
   Tier 1  RPS4Y1 override  -> fetal cluster, HIGH confidence, inferred male.
   Tier 2  secondary-marker vote -> fetal cluster, PROVISIONAL, likely female.
   Tier 3  unresolved       -> never forces a call; never labels from RPS4Y1 ABSENCE.
@@ -19,11 +21,14 @@ import sys
 EPS = 1e-9
 RPS4Y1 = "RPS4Y1"
 
-# Label vocabulary (ROADMAP.md §10).
+# Label vocabulary (docs/pipeline_design.md, "Outputs").
 LABEL_FETAL_MALE = "fetal_high_confidence_male"
 LABEL_FETAL_MARKER = "fetal_marker_supported"
 LABEL_MATERNAL = "maternal_likely"
 LABEL_UNRESOLVED = "unresolved"
+
+# The only composition-gate verdict under which clusters are oriented.
+GATE_ACCEPTED = "two_profiles"
 
 DEFAULT_PARAMS = {
     "min_cluster_cells": 50,
@@ -222,7 +227,7 @@ def decide(stats, params=None):
 
     if votes[winner] >= 1 and margin >= p["min_vote_margin"]:
         # v1 caps secondary-marker calls at PROVISIONAL: female calls are internally
-        # consistent but not independently validated (ROADMAP §3, §13).
+        # consistent but not independently validated.
         sup = supporters[winner]
         reason = (
             "%d fetal marker(s) enriched in cluster %s (%s); secondary-marker vote "
@@ -283,16 +288,44 @@ def _parse_ambient(path):
     return "NA"
 
 
+def _read_gate(path):
+    with open(path) as fh:
+        rows = list(csv.DictReader(fh, delimiter="\t"))
+    if len(rows) != 1:
+        sys.exit("ERROR: %s must hold exactly one gate row" % path)
+    return rows[0]
+
+
+def apply_gate(res, clusters, verdict, gate_reason):
+    """Withhold every label unless the composition gate accepted two profiles."""
+    if verdict == GATE_ACCEPTED:
+        return res
+    res = dict(res)
+    res.update(
+        fetal_cluster=None,
+        maternal_cluster=None,
+        tier="unresolved",
+        confidence="unresolved",
+        inferred_sex="undetermined",
+        rule="composition_gate",
+        supporting_markers=[],
+        labels={c: LABEL_UNRESOLVED for c in clusters},
+        reason="Composition gate verdict %s: %s" % (verdict, gate_reason),
+    )
+    return res
+
+
 def _open_out(path):
     return gzip.open(path, "wt", newline="") if path.endswith(".gz") else open(path, "w", newline="")
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--sample-id", required=True)
+    ap.add_argument("--group-id", required=True)
     ap.add_argument("--marker-summary", required=True)
     ap.add_argument("--clusters", required=True)
     ap.add_argument("--ambient", default=None)
+    ap.add_argument("--gate", required=True, help="gate.tsv from composition_gate.py")
     ap.add_argument("--cluster-labels-out", required=True)
     ap.add_argument("--cell-assignments-out", required=True)
     ap.add_argument("--qc-out", required=True)
@@ -306,7 +339,8 @@ def main(argv=None):
         sys.exit("ERROR: empty marker summary: %s" % args.marker_summary)
 
     stats = build_cluster_stats(rows)
-    res = decide(stats, params)
+    gate = _read_gate(args.gate)
+    res = apply_gate(decide(stats, params), stats["clusters"], gate["verdict"], gate["reason"])
 
     warnings_str = " | ".join(res["warnings"]) if res["warnings"] else ""
 
@@ -314,13 +348,13 @@ def main(argv=None):
     with open(args.cluster_labels_out, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t")
         w.writerow([
-            "sample_id", "cluster", "label", "confidence", "inferred_sex", "rule",
+            "group_id", "cluster", "label", "confidence", "inferred_sex", "rule",
             "supporting_markers", "n_singlet_cells", "reason", "warnings",
         ])
         for c in stats["clusters"]:
             is_fetal = c == res["fetal_cluster"]
             w.writerow([
-                args.sample_id, c, res["labels"][c],
+                args.group_id, c, res["labels"][c],
                 res["confidence"] if res["labels"][c] != LABEL_UNRESOLVED else "unresolved",
                 res["inferred_sex"] if is_fetal else ("undetermined" if res["fetal_cluster"] is None else "NA"),
                 res["rule"],
@@ -329,7 +363,7 @@ def main(argv=None):
                 res["reason"], warnings_str,
             ])
 
-    # sample_qc_summary.tsv
+    # group_qc_summary.tsv
     counts = {"singlet": 0, "doublet": 0, "unassigned": 0}
     per_cluster = {}
     cluster_rows = list(_read_clusters(args.clusters))
@@ -343,13 +377,13 @@ def main(argv=None):
     with open(args.qc_out, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t")
         w.writerow([
-            "sample_id", "verdict", "confidence", "inferred_sex", "fetal_cluster",
-            "maternal_cluster", "n_singlets", "n_doublets", "n_unassigned",
+            "group_id", "gate_verdict", "verdict", "confidence", "inferred_sex",
+            "fetal_cluster", "maternal_cluster", "n_singlets", "n_doublets", "n_unassigned",
             "n_singlet_clusters", "cluster_imbalance_ratio", "ambient_rna",
             "n_warnings", "reason", "warnings",
         ])
         w.writerow([
-            args.sample_id, res["tier"], res["confidence"], res["inferred_sex"],
+            args.group_id, gate["verdict"], res["tier"], res["confidence"], res["inferred_sex"],
             res["fetal_cluster"] if res["fetal_cluster"] is not None else "NA",
             res["maternal_cluster"] if res["maternal_cluster"] is not None else "NA",
             counts.get("singlet", 0), counts.get("doublet", 0), counts.get("unassigned", 0),
@@ -357,11 +391,12 @@ def main(argv=None):
             len(res["warnings"]), res["reason"], warnings_str,
         ])
 
-    # cell_assignments.tsv.gz
+    # cell_assignments.tsv.gz, keyed by group barcode; split_by_library.py resolves
+    # each row to its library and raw barcode through barcode_provenance.tsv.
     with _open_out(args.cell_assignments_out) as fh:
         w = csv.writer(fh, delimiter="\t")
         w.writerow([
-            "sample_id", "barcode", "souporcell_status", "souporcell_cluster",
+            "group_barcode", "souporcell_status", "souporcell_cluster",
             "label", "confidence", "reason",
         ])
         for r in cluster_rows:
@@ -374,12 +409,12 @@ def main(argv=None):
                 conf = "NA"
                 reason = "Souporcell %s; no maternal/fetal label assigned." % r["status"]
             w.writerow([
-                args.sample_id, r["barcode"], r["status"], r["assignment"],
+                r["barcode"], r["status"], r["assignment"],
                 label, conf, reason,
             ])
 
-    print("[label_clusters] %s -> verdict=%s confidence=%s fetal=%s" % (
-        args.sample_id, res["tier"], res["confidence"], res["fetal_cluster"]))
+    print("[label_clusters] %s -> gate=%s verdict=%s confidence=%s fetal=%s" % (
+        args.group_id, gate["verdict"], res["tier"], res["confidence"], res["fetal_cluster"]))
 
 
 if __name__ == "__main__":

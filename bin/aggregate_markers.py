@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Aggregate pregnancy-panel marker expression per Souporcell cluster (singlets only).
+"""Aggregate pregnancy-panel marker expression per group genotype cluster (singlets only).
 
-Reads a CellRanger filtered_feature_bc_matrix directory directly with scipy (no scanpy
-dependency) plus a Souporcell clusters.tsv, resolves each panel gene (symbol -> Ensembl,
-with alias fallback; FAIL LOUDLY if unresolved), and emits a long-format
+The genotype clusters come from one Souporcell run over a whole pregnancy group, so
+marker evidence is pooled across every library in the group: the fetal cells may sit
+almost entirely in one library. Reads each library's CellRanger
+filtered_feature_bc_matrix directly with scipy (no scanpy dependency), the group
+clusters.tsv, and barcode_provenance.tsv to map each group barcode back to its library
+and raw barcode. Resolves each panel gene (symbol -> Ensembl, with alias fallback; FAIL
+LOUDLY if unresolved or if libraries resolve it differently), and emits a long-format
 cluster_marker_summary.tsv consumed by label_clusters.py.
 
-Per (cluster, marker):
+Per (cluster, marker), summed over the group's libraries:
   n_cluster_cells, n_pos, frac_pos, cp10k (library-size-normalised pseudobulk, CP10K),
   mean_counts.  Mirrors the nf-demultiplex check_sex.R normalisation (CP10K + fraction
   of cells).
@@ -129,98 +133,148 @@ def _normalise_barcodes(bcs):
     return [re.sub(r"-\d+$", "", b) for b in bcs]
 
 
+def read_provenance(path):
+    """group_barcode -> (sample_id, raw_barcode)."""
+    mapping = {}
+    with open(path) as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            mapping[row["group_barcode"]] = (row["sample_id"], row["raw_barcode"])
+    if not mapping:
+        sys.exit("ERROR: %s has no provenance rows" % path)
+    return mapping
+
+
+def read_matrices(path):
+    """Two-column TSV: sample_id, expression matrix directory (in group order)."""
+    matrices = []
+    with open(path) as fh:
+        for line in fh:
+            if line.strip():
+                sample_id, matrix_dir = line.rstrip("\n").split("\t")
+                matrices.append((sample_id, matrix_dir))
+    return matrices
+
+
+def align(barcodes, wanted):
+    """Map wanted raw barcodes -> expression column, retrying suffix-stripped."""
+    index = {b: i for i, b in enumerate(barcodes)}
+    hits = {b: index[b] for b in wanted if b in index}
+    if hits:
+        return hits, "raw"
+    norm_index = {}
+    for i, b in enumerate(_normalise_barcodes(barcodes)):
+        norm_index.setdefault(b, i)
+    hits = {}
+    for b in wanted:
+        j = norm_index.get(re.sub(r"-\d+$", "", b))
+        if j is not None:
+            hits[b] = j
+    return hits, "suffix-stripped"
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--sample-id", required=True)
-    ap.add_argument("--clusters", required=True)
-    ap.add_argument("--matrix", required=True)
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--group-id", required=True)
+    ap.add_argument("--clusters", required=True, help="group Souporcell clusters.tsv")
+    ap.add_argument("--provenance", required=True, help="barcode_provenance.tsv")
+    ap.add_argument("--matrices", required=True,
+                    help="TSV of sample_id and expression matrix directory")
     ap.add_argument("--panel", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--resolution-out", required=True)
     args = ap.parse_args(argv)
 
-    mat, barcodes, features = load_matrix(args.matrix)
     panel = read_panel(args.panel)
-    resolved = resolve_genes(panel, features)
+    provenance = read_provenance(args.provenance)
+    matrices = read_matrices(args.matrices)
+
+    # Singlet raw barcode -> cluster, per library.
+    singlets = {}
+    with open(args.clusters) as fh:
+        for row in csv.DictReader(fh, delimiter="\t"):
+            if row["status"] != STATUS_SINGLET:
+                continue
+            if row["barcode"] not in provenance:
+                sys.exit("ERROR: barcode %r is not in %s" % (row["barcode"], args.provenance))
+            sample_id, raw = provenance[row["barcode"]]
+            singlets.setdefault(sample_id, {})[raw] = row["assignment"]
+
+    missing = sorted(set(sample for sample, _raw in provenance.values())
+                     - set(sample for sample, _dir in matrices))
+    if missing:
+        sys.exit("ERROR: no expression matrix supplied for %s" % ", ".join(missing))
+
+    resolution = None
+    # cluster -> {"n": cells, "total": library-size sum, "pos": {m: n}, "sum": {m: counts}}
+    acc = {}
+    for sample_id, matrix_dir in matrices:
+        mat, barcodes, features = load_matrix(matrix_dir)
+        resolved = resolve_genes(panel, features)
+        signature = [(r["symbol"], r["ensembl_id"]) for r in resolved]
+        if resolution is None:
+            resolution = resolved
+        elif signature != [(r["symbol"], r["ensembl_id"]) for r in resolution]:
+            sys.exit("ERROR: %s resolves the marker panel to different genes than the other "
+                     "libraries in group %s; check the references." % (sample_id, args.group_id))
+
+        wanted = singlets.get(sample_id, {})
+        if not wanted:
+            sys.stderr.write("[aggregate_markers] %s: no singlets\n" % sample_id)
+            continue
+        hits, how = align(barcodes, wanted)
+        if not hits:
+            sys.exit("ERROR: %s: no overlap between expression-matrix barcodes and Souporcell "
+                     "singlet barcodes (checked raw and suffix-stripped)." % sample_id)
+        sys.stderr.write("[aggregate_markers] %s: %d of %d singlets matched (%s)\n"
+                         % (sample_id, len(hits), len(wanted), how))
+
+        col_sums = np.asarray(mat.sum(axis=0)).ravel()
+        marker_rows = {r["symbol"]: np.asarray(mat.getrow(r["row"]).todense()).ravel()
+                       for r in resolved}
+        cluster_cols = {}
+        for raw, j in hits.items():
+            cluster_cols.setdefault(wanted[raw], []).append(j)
+        for cl, cols_list in cluster_cols.items():
+            cols = np.array(cols_list, dtype=int)
+            bucket = acc.setdefault(cl, {"n": 0, "total": 0.0, "pos": {}, "sum": {}})
+            bucket["n"] += len(cols)
+            bucket["total"] += float(col_sums[cols].sum())
+            for r in resolved:
+                vals = marker_rows[r["symbol"]][cols]
+                bucket["pos"][r["symbol"]] = bucket["pos"].get(r["symbol"], 0) + int((vals > 0).sum())
+                bucket["sum"][r["symbol"]] = bucket["sum"].get(r["symbol"], 0.0) + float(vals.sum())
+
+    if not acc:
+        sys.exit("ERROR: group %s has no singlets matched to expression" % args.group_id)
 
     with open(args.resolution_out, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t")
         w.writerow(["symbol", "tier", "resolved_via", "matched_symbol", "ensembl_id"])
-        for r in resolved:
+        for r in resolution:
             w.writerow([r["symbol"], r["tier"], r["via"], r["matched_symbol"], r["ensembl_id"]])
-
-    # Map singlet barcode -> cluster from Souporcell.
-    bc_cluster = {}
-    with open(args.clusters) as fh:
-        reader = csv.reader(fh, delimiter="\t")
-        header = next(reader)
-        idx = {n: i for i, n in enumerate(header)}
-        bc_i, st_i, as_i = idx.get("barcode", 0), idx.get("status", 1), idx.get("assignment", 2)
-        for row in reader:
-            if row and row[st_i] == STATUS_SINGLET:
-                bc_cluster[row[bc_i]] = row[as_i]
-
-    # Align expression barcodes to Souporcell barcodes.
-    bc_index = {b: i for i, b in enumerate(barcodes)}
-    overlap = set(bc_index) & set(bc_cluster)
-    used_map = bc_cluster
-    if not overlap:
-        # Retry after stripping the "-1"-style suffix on both sides.
-        norm_expr = _normalise_barcodes(barcodes)
-        norm_expr_index = {}
-        for i, b in enumerate(norm_expr):
-            norm_expr_index.setdefault(b, i)
-        norm_clusters = {re.sub(r"-\d+$", "", b): c for b, c in bc_cluster.items()}
-        overlap2 = set(norm_expr_index) & set(norm_clusters)
-        if not overlap2:
-            sys.exit(
-                "ERROR: no overlap between expression-matrix barcodes and Souporcell "
-                "singlet barcodes (checked raw and suffix-stripped). Check inputs."
-            )
-        bc_index = norm_expr_index
-        used_map = norm_clusters
-        sys.stderr.write(
-            "[aggregate_markers] matched barcodes after suffix-stripping (%d overlap)\n"
-            % len(overlap2)
-        )
-    else:
-        sys.stderr.write("[aggregate_markers] %d barcodes overlap\n" % len(overlap))
-
-    # Column indices per cluster.
-    cluster_cols = {}
-    for bc, cl in used_map.items():
-        j = bc_index.get(bc)
-        if j is not None:
-            cluster_cols.setdefault(cl, []).append(j)
-
-    # Precompute per-cell total counts (library size) and per-marker dense rows.
-    col_sums = np.asarray(mat.sum(axis=0)).ravel()
-    marker_rows = {r["symbol"]: np.asarray(mat.getrow(r["row"]).todense()).ravel() for r in resolved}
 
     with open(args.out, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t")
         w.writerow([
-            "sample_id", "cluster", "n_cluster_cells", "marker", "tier",
+            "group_id", "cluster", "n_cluster_cells", "marker", "tier",
             "ensembl_id", "n_pos", "frac_pos", "cp10k", "mean_counts",
         ])
-        for cl in sorted(cluster_cols):
-            cols = np.array(cluster_cols[cl], dtype=int)
-            n = len(cols)
-            total = float(col_sums[cols].sum())
-            for r in resolved:
-                vals = marker_rows[r["symbol"]][cols]
-                n_pos = int((vals > 0).sum())
-                frac_pos = n_pos / n if n else 0.0
-                gene_sum = float(vals.sum())
-                cp10k = (gene_sum / total * 1e4) if total > 0 else 0.0
-                mean_counts = gene_sum / n if n else 0.0
+        for cl in sorted(acc, key=lambda c: (len(c), c)):
+            b = acc[cl]
+            n = b["n"]
+            for r in resolution:
+                n_pos = b["pos"][r["symbol"]]
+                gene_sum = b["sum"][r["symbol"]]
                 w.writerow([
-                    args.sample_id, cl, n, r["symbol"], r["tier"], r["ensembl_id"],
-                    n_pos, "%.6f" % frac_pos, "%.4f" % cp10k, "%.4f" % mean_counts,
+                    args.group_id, cl, n, r["symbol"], r["tier"], r["ensembl_id"], n_pos,
+                    "%.6f" % (n_pos / n if n else 0.0),
+                    "%.4f" % (gene_sum / b["total"] * 1e4 if b["total"] > 0 else 0.0),
+                    "%.4f" % (gene_sum / n if n else 0.0),
                 ])
 
-    print("[aggregate_markers] %s -> %d clusters, %d markers"
-          % (args.sample_id, len(cluster_cols), len(resolved)))
+    print("[aggregate_markers] %s -> %d clusters, %d markers, %d libraries"
+          % (args.group_id, len(acc), len(resolution), len(matrices)))
 
 
 if __name__ == "__main__":

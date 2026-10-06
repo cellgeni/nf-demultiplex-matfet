@@ -1,17 +1,22 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://raw.githubusercontent.com/cellgeni/nf-demux-preg/main/assets/schema_input.json",
-    "title": "nf-demux-preg samplesheet schema",
-    "description": "Minimal per-library input contract. One row per independently processed sample.",
+    "$id": "https://raw.githubusercontent.com/cellgeni/nf-demultiplex-matfet/main/assets/schema_input.json",
+    "title": "nf-demultiplex-matfet samplesheet schema",
+    "description": "One row per library. Libraries sharing a group_id come from one pregnancy and are demultiplexed together. Enforced in main.nf (parseSamplesheet); this file documents the same contract.",
     "type": "array",
     "items": {
         "type": "object",
         "properties": {
+            "group_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._-]+$",
+                "errorMessage": "group_id must be provided: the pregnancy group (one mother, one fetus). A group may hold a single library."
+            },
             "sample_id": {
                 "type": "string",
-                "pattern": "^\\S+$",
+                "pattern": "^[A-Za-z0-9._-]+$",
                 "meta": ["id"],
-                "errorMessage": "sample_id must be provided and contain no spaces; it must be unique."
+                "errorMessage": "sample_id must be provided, unique across the samplesheet, and contain only letters, digits, '.', '_' and '-'."
             },
             "bam": {
                 "type": "string",
@@ -28,9 +33,26 @@
             "expression": {
                 "type": "string",
                 "format": "path",
-                "errorMessage": "expression must be a CellRanger filtered_feature_bc_matrix directory (v1 primary format)."
+                "errorMessage": "expression must be a CellRanger filtered_feature_bc_matrix directory."
+            },
+            "sample_role": {
+                "type": "string",
+                "enum": ["mixture"],
+                "default": "mixture",
+                "errorMessage": "sample_role must be 'mixture'; 'maternal_reference' is not supported yet."
+            },
+            "expected_genotypes": {
+                "type": "integer",
+                "enum": [2],
+                "default": 2,
+                "errorMessage": "expected_genotypes must be 2 (one mother, one fetus)."
+            },
+            "souporcell_dir": {
+                "type": "string",
+                "format": "directory-path",
+                "errorMessage": "souporcell_dir, if given, must be an existing per-library Souporcell output directory with alt.mtx, ref.mtx, barcodes.tsv and common_variants_covered.vcf."
             }
         },
-        "required": ["sample_id", "bam", "barcodes", "expression"]
+        "required": ["group_id", "sample_id", "bam", "barcodes", "expression"]
     }
 }

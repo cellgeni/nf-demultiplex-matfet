@@ -1,26 +1,29 @@
-// Apply the two-tier maternal/fetal decision engine and propagate labels to barcodes.
+// Apply the two-tier maternal/fetal decision engine to a group's clusters, only when
+// the composition gate accepted two profiles, and propagate labels to barcodes.
 
 process LABEL_CLUSTERS {
-    tag "${meta.id}"
-    publishDir "${params.outdir}/${meta.id}", mode: 'copy'
+    tag "${gmeta.id}"
+    publishDir "${params.outdir}/groups/${gmeta.id}", mode: 'copy',
+        pattern: '{cluster_labels.tsv,group_qc_summary.tsv}'
 
     input:
-    tuple val(meta), path(marker_summary), path(souporcell_dir)
+    tuple val(gmeta), path(marker_summary), path(clusters), path(ambient), path(gate)
 
     output:
-    tuple val(meta), path("cluster_labels.tsv"), path("sample_qc_summary.tsv"), emit: labels
-    tuple val(meta), path("cell_assignments.tsv.gz"),                           emit: assignments
+    tuple val(gmeta), path("cluster_labels.tsv"), path("group_qc_summary.tsv"), emit: labels
+    tuple val(gmeta), path("cell_assignments.tsv.gz"),                          emit: assignments
 
     script:
     """
     label_clusters.py \\
-        --sample-id ${meta.id} \\
+        --group-id ${gmeta.id} \\
         --marker-summary ${marker_summary} \\
-        --clusters ${souporcell_dir}/clusters.tsv \\
-        --ambient ${souporcell_dir}/ambient_rna.txt \\
+        --clusters ${clusters} \\
+        --ambient ${ambient} \\
+        --gate ${gate} \\
         --cluster-labels-out cluster_labels.tsv \\
         --cell-assignments-out cell_assignments.tsv.gz \\
-        --qc-out sample_qc_summary.tsv \\
+        --qc-out group_qc_summary.tsv \\
         --min-cluster-cells ${params.min_cluster_cells} \\
         --min-marker-detected-fraction ${params.min_marker_detected_fraction} \\
         --min-marker-fraction-delta ${params.min_marker_fraction_delta} \\

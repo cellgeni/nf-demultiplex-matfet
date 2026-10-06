@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Unit tests for the maternal/fetal decision engine (bin/label_clusters.py).
 
-Covers ROADMAP.md §12: RPS4Y1 precedence, the absent-RPS4Y1 safeguard, the female
-secondary-marker pattern, vote margins, QC gates, and determinism.
+Covers RPS4Y1 precedence, the absent-RPS4Y1 safeguard, the female secondary-marker
+pattern, vote margins, QC gates, determinism, and the composition-gate override.
 
 Runnable two ways:
     pytest tests/test_decision_engine.py
@@ -238,6 +238,40 @@ def test_decision_is_deterministic():
     r1 = lc.decide(stats)
     r2 = lc.decide(stats)
     assert r1 == r2
+
+
+# --------------------------------------------------------------------------- #
+# Composition gate override — labels only when two profiles were accepted
+# --------------------------------------------------------------------------- #
+def _clear_male_call():
+    stats = make_stats(
+        {"0": 200, "1": 200},
+        {"0": _all_markers(rps4y1=(0.30, 50.0)), "1": _all_markers(rps4y1=(0.01, 0.5))},
+    )
+    return stats, lc.decide(stats)
+
+
+def test_gate_two_profiles_keeps_the_call():
+    stats, res = _clear_male_call()
+    gated = lc.apply_gate(res, stats["clusters"], "two_profiles", "accepted")
+    assert gated == res
+    assert gated["labels"]["0"] == lc.LABEL_FETAL_MALE
+
+
+def test_gate_unresolved_withholds_even_a_clear_rps4y1_call():
+    stats, res = _clear_male_call()
+    gated = lc.apply_gate(res, stats["clusters"], "unresolved", "fake split")
+    assert set(gated["labels"].values()) == {lc.LABEL_UNRESOLVED}
+    assert gated["fetal_cluster"] is None and gated["maternal_cluster"] is None
+    assert gated["rule"] == "composition_gate"
+    assert "fake split" in gated["reason"]
+    assert res["labels"]["0"] == lc.LABEL_FETAL_MALE  # the input is not mutated
+
+
+def test_gate_one_profile_never_labels_maternal():
+    stats, res = _clear_male_call()
+    gated = lc.apply_gate(res, stats["clusters"], "one_profile", "minority too small")
+    assert lc.LABEL_MATERNAL not in gated["labels"].values()
 
 
 # --------------------------------------------------------------------------- #

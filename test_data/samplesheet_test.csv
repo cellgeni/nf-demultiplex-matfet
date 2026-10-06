@@ -1,2 +1,3 @@
-sample_id,bam,barcodes,expression
-sampleM,/path/to/sampleM/possorted_genome_bam.bam,/path/to/sampleM/barcodes.tsv.gz,/path/to/sampleM/filtered_feature_bc_matrix
+group_id,sample_id,bam,barcodes,expression,sample_role,expected_genotypes,souporcell_dir
+CW5,Embryo-Imp15350362,/path/to/Embryo-Imp15350362/possorted_genome_bam.bam,/path/to/Embryo-Imp15350362/barcodes.tsv.gz,/path/to/Embryo-Imp15350362/filtered_feature_bc_matrix,mixture,2,
+CW5,Embryo-Imp15350363,/path/to/Embryo-Imp15350363/possorted_genome_bam.bam,/path/to/Embryo-Imp15350363/barcodes.tsv.gz,/path/to/Embryo-Imp15350363/filtered_feature_bc_matrix,mixture,2,/path/to/results/souporcell/Embryo-Imp15350363

@@ -1,23 +1,24 @@
-// Human-readable per-sample HTML report (verdict + evidence + demux QC + provenance).
+// Human-readable per-group HTML report (verdict + gate + per-library counts + evidence).
 
 process BUILD_REPORT {
-    tag "${meta.id}"
+    tag "${gmeta.id}"
     publishDir "${params.outdir}/reports", mode: 'copy'
 
     input:
-    tuple val(meta), path(marker_summary), path(cluster_labels), path(qc_summary), path(souporcell_dir)
+    tuple val(gmeta), path(marker_summary), path(cluster_labels), path(qc_summary), path(gate), path(gate_libraries)
 
     output:
-    tuple val(meta), path("${meta.id}.html"), emit: report
+    tuple val(gmeta), path("${gmeta.id}.html"), emit: report
 
     script:
     """
     make_report.py \\
-        --sample-id ${meta.id} \\
+        --group-id ${gmeta.id} \\
         --marker-summary ${marker_summary} \\
         --cluster-labels ${cluster_labels} \\
         --qc-summary ${qc_summary} \\
-        --souporcell-qc ${souporcell_dir}/qc.txt \\
-        --out ${meta.id}.html
+        --gate ${gate} \\
+        --gate-libraries ${gate_libraries} \\
+        --out ${gmeta.id}.html
     """
 }

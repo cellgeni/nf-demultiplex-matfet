@@ -1,25 +1,31 @@
-// Aggregate panel-marker expression per Souporcell cluster (singlets only).
+// Aggregate panel-marker expression per group genotype cluster (singlets only),
+// pooled across every library in the group.
 
 process MARKER_SUMMARY {
-    tag "${meta.id}"
-    // Publish only the summary; the souporcell dir flows through the channel for
-    // downstream processes but is already published by SOUPORCELL (avoid duplicating it).
-    publishDir "${params.outdir}/${meta.id}", mode: 'copy', pattern: "*.tsv"
+    tag "${gmeta.id}"
+    publishDir "${params.outdir}/groups/${gmeta.id}", mode: 'copy', pattern: "*.tsv"
 
     input:
-    tuple val(meta), path(souporcell_dir), path(expression)
+    tuple val(gmeta), path(clusters), path(provenance), path(expression, stageAs: 'expr*/*')
     path marker_panel
 
     output:
-    tuple val(meta), path("cluster_marker_summary.tsv"), path("${souporcell_dir}"), emit: summary
-    path "gene_resolution.tsv",                                                     emit: resolution
+    tuple val(gmeta), path("cluster_marker_summary.tsv"), emit: summary
+    path "gene_resolution.tsv",                           emit: resolution
 
     script:
+    // Expression directories arrive in samplesheet order, matching gmeta.samples.
+    def rows = [gmeta.samples, expression instanceof List ? expression : [expression]].transpose()
+        .collect { sample_id, dir -> "'${sample_id}\t${dir}'" }
+        .join(' ')
     """
+    printf '%s\\n' ${rows} > matrices.tsv
+
     aggregate_markers.py \\
-        --sample-id ${meta.id} \\
-        --clusters ${souporcell_dir}/clusters.tsv \\
-        --matrix ${expression} \\
+        --group-id ${gmeta.id} \\
+        --clusters ${clusters} \\
+        --provenance ${provenance} \\
+        --matrices matrices.tsv \\
         --panel ${marker_panel} \\
         --out cluster_marker_summary.tsv \\
         --resolution-out gene_resolution.tsv

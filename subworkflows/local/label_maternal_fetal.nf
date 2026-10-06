@@ -1,35 +1,52 @@
-// LABEL_MATERNAL_FETAL — label the two genotype clusters as maternal/fetal/unresolved.
-//
-// Stable contract (for standalone runs): its input interface is the *Souporcell output
-// files* (clusters.tsv, ambient_rna.txt) + the expression matrix — NOT nf-demultiplex
-// internals. Anyone with existing Souporcell output can run just this subworkflow.
+// LABEL_MATERNAL_FETAL — orient a group's genotype clusters as maternal/fetal/unresolved
+// from pooled marker expression, then split the labelled cells back into libraries.
+//   MARKER_SUMMARY -> LABEL_CLUSTERS -> SPLIT_BY_LIBRARY, BUILD_REPORT
+// Clusters are only oriented when the composition gate verdict is two_profiles.
 
-include { MARKER_SUMMARY } from '../../modules/local/marker_summary'
-include { LABEL_CLUSTERS } from '../../modules/local/label_clusters'
-include { BUILD_REPORT   } from '../../modules/local/report'
+include { MARKER_SUMMARY   } from '../../modules/local/marker_summary'
+include { LABEL_CLUSTERS   } from '../../modules/local/label_clusters'
+include { SPLIT_BY_LIBRARY } from '../../modules/local/split_by_library'
+include { BUILD_REPORT     } from '../../modules/local/report'
 
 workflow LABEL_MATERNAL_FETAL {
     take:
-    ch_label_in    // tuple(meta, souporcell_dir, expression)
+    ch_discovery   // tuple(gmeta, clusters, ambient, profiles)
+    ch_provenance  // tuple(gmeta, barcode_provenance.tsv)
+    ch_gate        // tuple(gmeta, gate.tsv, gate_libraries.tsv)
+    ch_expression  // tuple(gmeta, [expression_dir, ...]) in samplesheet order
     marker_panel   // path
 
     main:
-    MARKER_SUMMARY(ch_label_in, marker_panel)
+    ch_marker_in = ch_discovery
+        .join(ch_provenance)
+        .join(ch_expression)
+        .map { gmeta, clusters, _ambient, _profiles, provenance, expression ->
+            [ gmeta, clusters, provenance, expression ] }
+    MARKER_SUMMARY(ch_marker_in, marker_panel)
 
-    LABEL_CLUSTERS(
-        MARKER_SUMMARY.out.summary.map { meta, summary, soup_dir -> [meta, summary, soup_dir] }
+    ch_label_in = MARKER_SUMMARY.out.summary
+        .join(ch_discovery)
+        .join(ch_gate)
+        .map { gmeta, summary, clusters, ambient, _profiles, gate, _gate_libraries ->
+            [ gmeta, summary, clusters, ambient, gate ] }
+    LABEL_CLUSTERS(ch_label_in)
+
+    SPLIT_BY_LIBRARY(
+        LABEL_CLUSTERS.out.assignments
+            .join(ch_provenance)
+            .join(ch_gate)
+            .map { gmeta, assignments, provenance, gate, _gate_libraries ->
+                [ gmeta, assignments, provenance, gate ] }
     )
 
-    // Assemble report inputs by joining on meta.
-    ch_report = MARKER_SUMMARY.out.summary
-        .map { meta, summary, soup_dir -> [meta, summary, soup_dir] }
-        .join(LABEL_CLUSTERS.out.labels)          // + cluster_labels, qc_summary
-        .map { meta, summary, soup_dir, labels, qc -> [meta, summary, labels, qc, soup_dir] }
-
-    BUILD_REPORT(ch_report)
+    BUILD_REPORT(
+        MARKER_SUMMARY.out.summary
+            .join(LABEL_CLUSTERS.out.labels)
+            .join(ch_gate)
+    )
 
     emit:
     cluster_labels = LABEL_CLUSTERS.out.labels
-    assignments    = LABEL_CLUSTERS.out.assignments
+    libraries      = SPLIT_BY_LIBRARY.out.libraries
     report         = BUILD_REPORT.out.report
 }

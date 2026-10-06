@@ -1,33 +1,45 @@
 #!/usr/bin/env nextflow
 /*
- * nf-demux-preg
- * Maternal/fetal demultiplexing of single-cell pregnancy samples.
- *   SOUPORCELL_DEMUX (K=2)  ->  LABEL_MATERNAL_FETAL (marker panel)
- * See ROADMAP.md.
+ * nf-demultiplex-matfet
+ * Maternal/fetal demultiplexing of single-cell pregnancy samples, one pregnancy group
+ * at a time:
+ *   SOUPORCELL_DEMUX (per library: remap + allele counts)
+ *     -> GROUP_DEMUX (per group: group matrix, Souporcell discovery, composition gate)
+ *     -> LABEL_MATERNAL_FETAL (per group: marker orientation, per-library split, report)
+ * See docs/pipeline_design.md.
  */
 
 nextflow.enable.dsl = 2
 
 include { SOUPORCELL_DEMUX     } from './subworkflows/local/souporcell_demux'
+include { GROUP_DEMUX          } from './subworkflows/local/group_demux'
 include { LABEL_MATERNAL_FETAL } from './subworkflows/local/label_maternal_fetal'
 
 def helpMessage() {
     log.info """
-    nf-demux-preg — maternal/fetal demultiplexing (Souporcell K=2 + marker labeling)
+    nf-demultiplex-matfet — group-aware maternal/fetal demultiplexing
 
     Usage:
-      nextflow run main.nf --input samplesheet.csv --outdir results -profile sanger,singularity
+      nextflow run main.nf --input samplesheet.csv --outdir results -profile sanger
 
-    Samplesheet (CSV, header required):
-      sample_id,bam,barcodes,expression
+    Samplesheet (CSV, header required; relative paths resolve against the
+    samplesheet's own directory):
+      group_id,sample_id,bam,barcodes,expression[,sample_role][,expected_genotypes][,souporcell_dir]
 
-      sample_id    Unique library identifier (no spaces).
-      bam          CellRanger BAM with cell barcodes (indexed, or index is created).
-      barcodes     Filtered cell-barcode file (optionally .gz).
-      expression   CellRanger filtered_feature_bc_matrix directory.
+      group_id            Pregnancy group: libraries sharing one mother and one fetus.
+                          A group of one library is allowed.
+      sample_id           Unique library identifier across the whole samplesheet.
+      bam                 CellRanger BAM with cell barcodes (indexed, or index is created).
+      barcodes            Filtered cell-barcode file (optionally .gz).
+      expression          CellRanger filtered_feature_bc_matrix directory.
+      sample_role         Optional, default 'mixture'. 'maternal_reference' is not
+                          supported yet.
+      expected_genotypes  Optional, default 2. Only 2 is supported.
+      souporcell_dir      Optional. An existing per-library Souporcell output directory
+                          (alt.mtx, ref.mtx, barcodes.tsv, common_variants_covered.vcf);
+                          the library then skips remapping and allele counting.
 
-    K is fixed at 2 (one maternal + one fetal genotype); it is not a samplesheet column.
-    See ROADMAP.md §7 for the input contract and §8 for the decision logic.
+    See docs/pipeline_design.md for the design, the composition gate and the outputs.
     """.stripIndent()
 }
 
@@ -51,9 +63,85 @@ def checkContainerEngine() {
     }
 }
 
+/*
+ * Read and validate the whole samplesheet before any job is submitted.
+ * Returns a list of [meta, barcodes, bam, expression, souporcell_dir or null]
+ * in samplesheet order, with meta = [id, group, index, group_size].
+ */
+def resolvePath(sheet_dir, String p) {
+    return p.startsWith('/') ? file(p) : sheet_dir.resolve(p)
+}
+
+def mustExist(f, what, row_id) {
+    if (!f.exists()) { error "Samplesheet row '${row_id}': ${what} not found: ${f}" }
+    return f
+}
+
+def parseSamplesheet(sheet_path) {
+    def sheet = file(sheet_path, checkIfExists: true)
+    def sheet_dir = sheet.parent
+
+    def raw_rows = sheet.splitCsv(header: true, strip: true)
+    if (!raw_rows) { error "Samplesheet ${sheet} has no rows" }
+
+    def rows = []
+    raw_rows.eachWithIndex { row, index ->
+        [ 'group_id', 'sample_id', 'bam', 'barcodes', 'expression' ].each { col ->
+            if (!row[col]?.trim()) {
+                error "Samplesheet row ${index + 1} is missing required column '${col}': ${row}"
+            }
+        }
+        def id    = row.sample_id.trim()
+        def group = row.group_id.trim()
+        [ sample_id: id, group_id: group ].each { col, value ->
+            if (!(value ==~ /^[A-Za-z0-9._-]+$/)) {
+                error "Samplesheet ${col} '${value}' may only contain letters, digits, '.', '_' and '-'"
+            }
+        }
+
+        def role = row.sample_role?.trim() ?: 'mixture'
+        if (role == 'maternal_reference') {
+            error "Samplesheet row '${id}': sample_role 'maternal_reference' is not supported yet; " +
+                  "maternal reference libraries have not been validated (docs/pipeline_design.md)"
+        }
+        if (role != 'mixture') {
+            error "Samplesheet row '${id}': unknown sample_role '${role}' (expected 'mixture')"
+        }
+
+        def k = row.expected_genotypes?.trim() ?: '2'
+        if (k != '2') {
+            error "Samplesheet row '${id}': expected_genotypes must be 2 (one mother, one fetus); " +
+                  "got '${k}'. Other values have not been validated."
+        }
+
+        def soup_dir = null
+        if (row.souporcell_dir?.trim()) {
+            soup_dir = mustExist(resolvePath(sheet_dir, row.souporcell_dir.trim()), 'souporcell_dir', id)
+            [ 'alt.mtx', 'ref.mtx', 'barcodes.tsv', 'common_variants_covered.vcf' ].each { name ->
+                mustExist(soup_dir.resolve(name), "souporcell_dir file ${name}", id)
+            }
+        }
+
+        rows << [
+            [ id: id, group: group, index: index ],
+            mustExist(resolvePath(sheet_dir, row.barcodes.trim()),   'barcodes',   id),
+            mustExist(resolvePath(sheet_dir, row.bam.trim()),        'bam',        id),
+            mustExist(resolvePath(sheet_dir, row.expression.trim()), 'expression', id),
+            soup_dir,
+        ]
+    }
+
+    def dups = rows.collect { it[0].id }.countBy { it }.findAll { _id, n -> n > 1 }.keySet()
+    if (dups) { error "Duplicate sample_id(s) in samplesheet: ${dups.join(', ')}" }
+
+    def sizes = rows.collect { it[0].group }.countBy { it }
+    rows.each { it[0].group_size = sizes[it[0].group] }
+    return rows
+}
+
 def completionMessage() {
     if (workflow.success) {
-        log.info "Done. Results in ${params.outdir} (per-sample tables + reports/<sample_id>.html)."
+        log.info "Done. Results in ${params.outdir} (groups/<group_id>/, <sample_id>/, reports/<group_id>.html)."
     }
     else {
         log.error "Pipeline finished with errors (see above). Any partial results are in ${params.outdir}."
@@ -72,87 +160,60 @@ workflow {
 
     checkContainerEngine()
 
-    // ---- Parse and light-validate the samplesheet ----
-    ch_rows = Channel
-        .fromPath(params.input, checkIfExists: true)
-        .splitCsv(header: true, strip: true)
-        .map { row ->
-            [ 'sample_id', 'bam', 'barcodes', 'expression' ].each { col ->
-                if (!row.containsKey(col) || !row[col]?.trim()) {
-                    error "Samplesheet row is missing required column '${col}': ${row}"
-                }
-            }
-            def meta       = [ id: row.sample_id.trim() ]
-            def bam        = file(row.bam.trim(),        checkIfExists: true)
-            def barcodes   = file(row.barcodes.trim(),   checkIfExists: true)
-            def expression = file(row.expression.trim(), checkIfExists: true)
-            [ meta, barcodes, bam, expression ]
-        }
+    def rows = parseSamplesheet(params.input)
 
-    // Fail fast on duplicate sample_ids.
-    ch_rows
-        .map { meta, _barcodes, _bam, _expression -> meta.id }
-        .toList()
-        .map { ids ->
-            def dups = ids.countBy { it }.findAll { _k, v -> v > 1 }.keySet()
-            if (dups) { error "Duplicate sample_id(s) in samplesheet: ${dups.join(', ')}" }
-        }
-
-    // ---- Subworkflow 1: Souporcell demux (K=2) ----
-    ch_soup_in = ch_rows.map { meta, barcodes, bam, _expression -> [ meta, barcodes, bam ] }
-    SOUPORCELL_DEMUX(ch_soup_in)
-
-    // ---- Subworkflow 2: maternal/fetal labeling ----
-    ch_expr = ch_rows.map { meta, _barcodes, _bam, expression -> [ meta, expression ] }
-    ch_label_in = SOUPORCELL_DEMUX.out.dir
-        .join(ch_expr)                                    // (meta, soup_dir, expression)
-        .map { meta, soup_dir, expression -> [ meta, soup_dir, expression ] }
-
-    LABEL_MATERNAL_FETAL(ch_label_in, file(params.marker_panel, checkIfExists: true))
-
-    workflow.onComplete = {
-        completionMessage()
-    }
-}
-
-/*
- * Standalone entry: run ONLY the labeling subworkflow against existing Souporcell output.
- * This is the "LABEL_MATERNAL_FETAL is independently runnable/testable" design rule (ROADMAP §4).
- *
- *   nextflow run main.nf -entry LABEL_ONLY --input label_samplesheet.csv -profile test
- *
- * Samplesheet columns: sample_id,souporcell_dir,expression
- *   souporcell_dir must contain clusters.tsv and ambient_rna.txt (and qc.txt for the report).
- */
-workflow LABEL_ONLY {
-    if (params.help || !params.input) {
-        helpMessage()
-        if (!params.input) { log.error "Missing required --input samplesheet."; System.exit(1) }
-        return
+    // One group meta per pregnancy group; libraries listed in samplesheet order.
+    def gmetas = [:]
+    rows.each { meta, _barcodes, _bam, _expression, _soup_dir ->
+        gmetas.get(meta.group, [ id: meta.group, samples: [], k: 2 ]).samples << meta.id
     }
 
-    checkContainerEngine()
+    def meta_by_id = rows.collectEntries { meta, _barcodes, _bam, _expression, _soup_dir -> [ meta.id, meta ] }
 
-    ch_label_in = Channel
-        .fromPath(params.input, checkIfExists: true)
-        .splitCsv(header: true, strip: true)
-        .map { row ->
-            [ 'sample_id', 'souporcell_dir', 'expression' ].each { col ->
-                if (!row.containsKey(col) || !row[col]?.trim()) {
-                    error "LABEL_ONLY samplesheet row missing required column '${col}': ${row}"
-                }
-            }
-            // Resolve relative paths against projectDir so the shipped fixture runs
-            // from any launch directory.
-            def resolve = { p -> p.startsWith('/') ? file(p, checkIfExists: true)
-                                                    : file("${projectDir}/${p}", checkIfExists: true) }
-            def meta       = [ id: row.sample_id.trim() ]
-            def soup_dir   = resolve(row.souporcell_dir.trim())
-            def expression = resolve(row.expression.trim())
-            [ meta, soup_dir, expression ]
+    ch_rows = Channel.fromList(rows)
+
+    // ---- Per library: remap + allele counts, unless an existing Souporcell dir is given ----
+    // Only the sample id goes in, so the cached remap depends on the library alone:
+    // adding, removing or regrouping other samplesheet rows must not redo hours of
+    // remapping on -resume. The group fields are reattached by id afterwards.
+    ch_to_count = ch_rows
+        .filter { _meta, _barcodes, _bam, _expression, soup_dir -> soup_dir == null }
+        .map { meta, barcodes, bam, _expression, _soup_dir -> [ [ id: meta.id ], barcodes, bam ] }
+    SOUPORCELL_DEMUX(ch_to_count)
+
+    ch_counts = SOUPORCELL_DEMUX.out.dir.map { lib, dir -> [ meta_by_id[lib.id], dir ] }.mix(
+        ch_rows
+            .filter { _meta, _barcodes, _bam, _expression, soup_dir -> soup_dir != null }
+            .map { meta, _barcodes, _bam, _expression, soup_dir -> [ meta, soup_dir ] }
+    )
+
+    // Each group moves on as soon as its own libraries are counted; within a group,
+    // libraries are put back in samplesheet order so the group matrix is reproducible.
+    ch_groups = ch_counts
+        .map { meta, dir -> [ groupKey(meta.group, meta.group_size), meta.index, dir ] }
+        .groupTuple()
+        .map { key, indices, dirs ->
+            def ordered = [ indices, dirs ].transpose().sort { it[0] }.collect { it[1] }
+            [ gmetas[key.toString()], ordered ]
         }
 
-    LABEL_MATERNAL_FETAL(ch_label_in, file(params.marker_panel, checkIfExists: true))
+    // ---- Per group: group matrix, Souporcell discovery, composition gate ----
+    GROUP_DEMUX(ch_groups, file(params.soc_vcf, checkIfExists: true))
+
+    // ---- Per group: maternal/fetal orientation, per-library split, report ----
+    ch_expression = Channel.fromList(
+        gmetas.values().collect { gmeta ->
+            [ gmeta, rows.findAll { it[0].group == gmeta.id }.collect { it[3] } ]
+        }
+    )
+
+    LABEL_MATERNAL_FETAL(
+        GROUP_DEMUX.out.discovery,
+        GROUP_DEMUX.out.provenance,
+        GROUP_DEMUX.out.gate,
+        ch_expression,
+        file(params.marker_panel, checkIfExists: true)
+    )
 
     workflow.onComplete = {
         completionMessage()

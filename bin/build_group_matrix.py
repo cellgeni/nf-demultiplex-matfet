@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Harmonise per-library Souporcell/Vartrix allele matrices into group matrices.
 
-This is a validation utility (Gate 1 of docs/group_aware_redesign.md), not a
-Nextflow process. It implements the group-matrix technical contract: union of
-covered variants in reference-panel order, concatenated cells in samplesheet
-order, and explicit provenance/QC metadata.
+Run by the BUILD_GROUP_MATRIX process; written and verified during validation
+(Gate 1 of the validation plan; see docs/pipeline_design.md). It implements the group-matrix
+technical contract: union of covered variants in reference-panel order,
+concatenated cells in samplesheet order, and explicit provenance/QC metadata.
 
 Standard library only, single streaming pass per library, so it is safe for
 large real inputs under LSF.
@@ -346,8 +346,8 @@ def bgzip_and_index(vcf_path: str, bgzip_cmd: list[str], tabix_cmd: list[str]) -
             os.remove(gz_path)
         print(f"WARNING: could not create {gz_path}: {exc}", file=sys.stderr)
         print(
-            "WARNING: run bgzip/tabix from the pinned Singularity image and rerun "
-            "the integrity check before any Vireo job.",
+            "WARNING: the bgzip copy is only for tools that need an indexed VCF; "
+            "Souporcell discovery reads variants.vcf directly.",
             file=sys.stderr,
         )
         return False
