@@ -255,6 +255,16 @@ workflow {
         error "Unknown --mode '${params.mode}' (expected 'pregnancy' or 'fetal'). See --help."
     }
 
+    // Site files have no defaults outside -profile sanger (conf/sanger.config).
+    if (!params.container) {
+        error "--container is required: a Singularity image with Souporcell, cellsnp-lite, samtools and Python (-profile sanger sets the farm image)"
+    }
+    if (!params.soc_vcf) {
+        error "--soc_vcf is required: the common-variant panel VCF (-profile sanger sets the farm panel)"
+    }
+    if (!params.soc_fasta && !(params.mode == 'fetal' && params.fetal_souporcell == 'off')) {
+        error "--soc_fasta is required for Souporcell's remap: the genome FASTA the BAMs were aligned to (-profile sanger sets the farm FASTA)"
+    }
     checkContainerEngine()
 
     // Souporcell always runs at k=2 (modules/local/souporcell.nf); other values were never validated.

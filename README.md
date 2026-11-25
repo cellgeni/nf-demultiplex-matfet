@@ -45,7 +45,7 @@ Run from the directory where results should go, e.g. a ticket directory. Nextflo
 each task to LSF; run the launcher itself in a persistent session (`screen`/`tmux`).
 
 ```bash
-cd /lustre/scratch127/cellgen/cellgeni/tickets/REQ-xxxxx
+cd /path/to/run_dir
 module load cellgen/nextflow
 
 nextflow run /path/to/nf-demultiplex-matfet/main.nf \
@@ -63,15 +63,19 @@ This runs pregnancy mode; for fetal tissue add `--mode fetal` (see [Fetal mode](
 
 ### Reference files
 
-The defaults are Sanger farm paths. Override them elsewhere, and whenever the BAMs were
-aligned to a different reference: Souporcell's remap and allele counts are only correct
-against the reference the BAMs were aligned to.
+These have no default: give them on the command line, or use `-profile sanger`, which sets
+the Sanger farm copies (`conf/sanger.config`). Use a FASTA of the reference the BAMs were
+aligned to: Souporcell's remap and allele counts are only correct against it.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `--soc_fasta` | `/nfs/cellgeni/STAR/human/2020A/GRCh38_v32_modified.fa` | Genome FASTA of the BAMs' reference (GRCh38, 10x 2020-A). |
-| `--soc_vcf` | `/nfs/cellgeni/pipeline-files/demultiplex/reference_vcfs/chr_filtered_2p_1kgenomes_GRCh38.vcf` | Common-variant panel (1000 Genomes SNPs, allele frequency ≥ 2%); Souporcell genotypes cells at these sites. |
-| `--container` | `/nfs/cellgeni/singularity/images/souporcell_v2.5-python_3.10-vireo_v0.5.8-cellsnp-lite_1.2.3-nextflow-compatible.sif` | Singularity image with Souporcell, samtools and Python; always used. |
+| `--soc_fasta` | none; `-profile sanger` sets it | Pregnancy mode, and fetal mode's Souporcell check. Genome FASTA of the BAMs' reference (GRCh38, 10x 2020-A). |
+| `--soc_vcf` | none; `-profile sanger` sets it | Both modes. Common-variant panel (1000 Genomes SNPs, allele frequency ≥ 2%): Souporcell genotypes cells at these sites; fetal mode piles them up and takes population frequencies from it. |
+| `--container` | none; `-profile sanger` sets it | Singularity image with Souporcell, cellsnp-lite, samtools and Python; always used. |
+
+Off the farm, build the image from the repository's [`Dockerfile`](Dockerfile), which
+reproduces the farm image's tool versions, convert it with `singularity build`, and pass the
+`.sif` as `--container`.
 
 ### Samplesheet
 
@@ -204,7 +208,7 @@ bash tests/test_souporcell_wrapper.sh       # wrapper argument regression test
 python3 tests/test_fetal_summary.py         # fetal-mode summary unit tests (needs pandas)
 python3 tests/test_souporcell_distance.py   # fetal-mode Souporcell check unit tests (needs pandas)
 python3 tests/make_fixture.py               # synthetic two-group fixture (needs numpy + scipy)
-nextflow run . -profile test                # end-to-end on the fixture
+nextflow run . -profile sanger,test         # end-to-end on the fixture (or -profile test --container <image>)
 ```
 
 The end-to-end test runs on the local executor in the container: run it inside an LSF

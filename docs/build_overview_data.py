@@ -5,7 +5,7 @@ Reads a finished nf-demultiplex-matfet run (gate, labels and per-library summari
 validation runs under the REQ-68805 group_matrix directory (re-scored with the
 pipeline's own composition_gate functions), the spike-in detection curve, and the
 library metadata table, and rewrites the page's <script id="pipeline-data"> block in
-place. Paths are for REQ-68805; edit them for another ticket.
+place. Set TICKET and ACTIONS to the REQ-68805 folders (or another ticket's) before running.
 
     python3 docs/build_overview_data.py
 """
@@ -20,11 +20,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "bin"))
 from composition_gate import parse_ambient, profile_discordance  # noqa: E402
 
-TICKET = "/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805"
+TICKET = "/path/to/REQ-68805"
 RESULTS = f"{TICKET}/results_all"
 VALIDATION = f"{TICKET}/group_matrix"
 PERLIB = f"{TICKET}/results/souporcell"
-ACTIONS = "/nfs/cellgeni/tickets/REQ-68805/actions"
+ACTIONS = f"{TICKET}/actions"
 SAMPLESHEET = f"{ACTIONS}/samplesheet_all.csv"
 METADATA = f"{ACTIONS}/Souporcell_ECTatlas_scRNAseq_libraries - scRNAseq_by_library.csv"
 

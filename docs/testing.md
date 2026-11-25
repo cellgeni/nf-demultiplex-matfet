@@ -62,7 +62,7 @@ The scripts can be driven directly on it (`build_group_matrix.py` →
 
 ```bash
 module load cellgen/nextflow cellgen/singularity
-nextflow run . -profile test
+nextflow run . -profile sanger,test   # elsewhere: -profile test --container <image>
 ```
 
 Runs everything from `BUILD_GROUP_MATRIX` onwards for real, in the pinned container,

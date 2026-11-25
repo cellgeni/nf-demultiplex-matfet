@@ -5,7 +5,7 @@ way, and the evidence behind every threshold. The full validation record
 (`docs/group_aware_redesign.md`) and the validation harness are kept in git under
 `validation/group-matrix-core`, `validation/group-souporcell` and
 `validation/group-vireo`, not on `main`. Result files cited below are under
-`/lustre/scratch127/cellgen/cellgeni/tickets/REQ-68805/group_matrix/`.
+`group_matrix/` of the REQ-68805 ticket folder.
 
 ## Why genotypes are inferred per pregnancy group
 

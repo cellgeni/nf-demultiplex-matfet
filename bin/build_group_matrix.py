@@ -559,9 +559,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="reference panel VCF; only its ##contig header is read, to fix variant order")
     parser.add_argument("--singularity-image", default=None,
                         help="image used to run bgzip/tabix when they are not on PATH")
-    parser.add_argument("--singularity-bind", default="/lustre,/nfs",
-                        help="paths bound into the image; the defaults are where this project's "
-                             "inputs and outputs live")
+    parser.add_argument("--singularity-bind", default=None,
+                        help="comma-separated paths to bind into the image (singularity -B)")
     parser.add_argument("--index-only", action="store_true",
                         help="do not rebuild; only write variants.vcf.gz/.tbi for an existing "
                              "build and refresh its manifest")
@@ -570,7 +569,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.singularity_image:
-        prefix = ["singularity", "exec", "-B", args.singularity_bind, args.singularity_image]
+        prefix = ["singularity", "exec"] + (["-B", args.singularity_bind] if args.singularity_bind else []) + [args.singularity_image]
         bgzip_cmd, tabix_cmd = prefix + ["bgzip"], prefix + ["tabix"]
     else:
         bgzip_cmd = [shutil.which("bgzip") or "bgzip"]
