@@ -1,5 +1,6 @@
 // Thin wrapper over the pinned nf-demultiplex Souporcell path (git submodule).
-// Heavy logic stays single-source in modules/nf-demultiplex/bin/. Only K is fixed here.
+// Heavy logic stays single-source in modules/nf-demultiplex/bin/. Only K is fixed here: k=2 in both
+// modes, the only value validated (one mother, one fetus; or a fetus split in two).
 
 process SOUPORCELL {
     tag "${meta.id}"
@@ -17,7 +18,7 @@ process SOUPORCELL {
     """
     # nf-demultiplex souporcell.sh needs a coordinate-sorted, indexed BAM alongside.
     if [ ! -f "${bam}.bai" ] && [ ! -f "${bam.baseName}.bai" ]; then
-        samtools index -@ ${task.cpus} ${bam}
+        samtools index ${bam}    # single-threaded: -@ hangs with samtools 1.9 in this image
     fi
 
     # Positional args (from nf-demultiplex/bin/souporcell.sh):
@@ -29,7 +30,7 @@ process SOUPORCELL {
         ${params.known_genotypes} \\
         ${params.soc_vcf} \\
         ${params.soc_fasta} \\
-        ${params.souporcell_k} \\
+        2 \\
         ${params.skip_remap} \\
         ${params.no_umi}
 
@@ -38,7 +39,7 @@ process SOUPORCELL {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        souporcell_k: "${params.souporcell_k}"
+        souporcell_k: "2"
         souporcell_skip_remap: "${params.skip_remap}"
         souporcell_no_umi: "${params.no_umi}"
         nf_demultiplex_bin: "${soup_bin}"
